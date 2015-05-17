@@ -169,16 +169,6 @@ fn test_version() {
     assert_eq!("2.5.0", version());
 }
 
-struct TestParserImpl;
-impl ParserHandler for TestParserImpl {
-    fn on_url(&self, url: &String) {
-        println!("{}", url);
-    }
-    fn on_status(&self, url: &String) {
-        println!("{}", url);
-    }
-}
-
 #[test]
 fn request_parser() {
     struct TestParserImpl;
