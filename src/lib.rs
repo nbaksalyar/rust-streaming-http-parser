@@ -8,7 +8,8 @@ type HttpCallback = extern fn(*mut HttpParser) -> *mut libc::c_int;
 type HttpDataCallback = extern fn(*mut HttpParser, *const u32, libc::size_t) -> *mut libc::c_int;
 
 #[repr(C)]
-enum HttpParserType {
+#[derive(Clone, Copy)]
+pub enum ParserType {
     HttpRequest,
     HttpResponse,
     HttpBoth
@@ -28,6 +29,20 @@ struct HttpParser {
 
     // Public Interface
     data: *mut libc::c_void
+}
+
+impl HttpParser {
+    fn new() -> HttpParser {
+        HttpParser {
+            internal_state: 0,
+            nread: 0,
+            content_length: 0,
+            http_major: 0,
+            http_minor: 0,
+            extended_status: 0,
+            data: 0 as *mut libc::c_void
+        }
+    }
 }
 
 #[repr(C)]
@@ -95,7 +110,7 @@ static CALLBACK_WRAPPERS: HttpParserSettings = HttpParserSettings {
 
 extern "C" {
     fn http_parser_version() -> u32;
-    fn http_parser_init(parser: *mut HttpParser, parser_type: HttpParserType);
+    fn http_parser_init(parser: *mut HttpParser, parser_type: ParserType);
     fn http_parser_settings_init(settings: *mut HttpParserSettings);
     fn http_parser_execute(parser: *mut HttpParser, settings: *const HttpParserSettings, data: *const u8, len: libc::size_t) -> libc::size_t;
     // fn http_method_str(m: HttpMethod);
@@ -117,38 +132,46 @@ pub trait ParserHandler {
 
 pub struct Parser<'a> {
     handler: &'a ParserHandler,
-    state: HttpParser
+    state: HttpParser,
+    parser_type: ParserType
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(handler: &'a ParserHandler) -> Parser<'a> {
+    pub fn response(handler: &'a ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
-            state: HttpParser {
-                internal_state: 0,
-                nread: 0,
-                content_length: 0,
-                http_major: 0,
-                http_minor: 0,
-                extended_status: 0,
-                data: 0 as *mut libc::c_void
-            }
+            state: HttpParser::new(),
+            parser_type: ParserType::HttpResponse
+        }
+    }
+
+    pub fn request(handler: &'a ParserHandler) -> Parser<'a> {
+        Parser {
+            handler: handler,
+            state: HttpParser::new(),
+            parser_type: ParserType::HttpRequest
+        }
+    }
+
+    pub fn request_and_response(handler: &'a ParserHandler) -> Parser<'a> {
+        Parser {
+            handler: handler,
+            state: HttpParser::new(),
+            parser_type: ParserType::HttpBoth
         }
     }
 }
 
-pub fn parse(pars: &mut Parser, data: &[u8]) -> usize {
+pub fn parse(parser: &mut Parser, data: &[u8]) -> usize {
     unsafe {
-        http_parser_init(&mut pars.state as *mut _, HttpParserType::HttpRequest);
+        http_parser_init(&mut parser.state as *mut _, parser.parser_type);
 
-        pars.state.data = &mut (*pars) as *mut _ as *mut libc::c_void;
+        parser.state.data = &mut (*parser) as *mut _ as *mut libc::c_void;
 
-        let parsed = http_parser_execute(&mut pars.state as *mut _,
+        return http_parser_execute(&mut parser.state as *mut _,
                                          &CALLBACK_WRAPPERS as *const _,
                                          data.as_ptr(),
-                                         data.len() as u64);
-
-        return parsed as usize;
+                                         data.len() as u64) as usize;
     }
 }
 
@@ -171,14 +194,14 @@ fn test_version() {
 
 #[test]
 fn request_parser() {
-    struct TestParserImpl;
-    impl ParserHandler for TestParserImpl {
+    struct TestRequestParser;
+    impl ParserHandler for TestRequestParser {
         fn on_url(&self, url: &String) { assert_eq!("/hello", url); }
         fn on_header_field(&self, hdr: &String) { assert_eq!("Host", hdr); }
         fn on_header_value(&self, val: &String) { assert_eq!("localhost.localdomain", val); }
     }
     let req = "GET /hello HTTP/1.0\r\nHost: localhost.localdomain\r\n\r\n";
-    let parsed = parse(&mut Parser::new(&TestParserImpl), req.as_bytes());
+    let parsed = parse(&mut Parser::request(&TestRequestParser), req.as_bytes());
     assert!(parsed > 0);
 
     // assert_eq!(parser.http_major, 1);
@@ -187,4 +210,13 @@ fn request_parser() {
 
 #[test]
 fn response_parser() {
+    struct TestResponseParser;
+    impl ParserHandler for TestResponseParser {
+        fn on_status(&self, status: &String) { assert_eq!("OK", status); }
+        fn on_header_field(&self, hdr: &String) { assert_eq!("Host", hdr); }
+        fn on_header_value(&self, val: &String) { assert_eq!("localhost.localdomain", val); }
+    }
+    let req = "HTTP/1.1 200 OK\r\nHost: localhost.localdomain\r\n\r\n";
+    let parsed = parse(&mut Parser::response(&TestResponseParser), req.as_bytes());
+    assert!(parsed > 0);
 }
