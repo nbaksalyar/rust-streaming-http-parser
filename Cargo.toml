@@ -3,6 +3,11 @@ name = "http-muncher"
 version = "0.1.0"
 authors = ["Nikita Baksalyar <nikita.baksalyar@gmail.com>"]
 build = "build.rs"
+description = "Rust Streaming HTTP parser based on joyent/http-parser"
+documentation = "http://nbaksalyar.github.io/rust-streaming-http-parser/"
+repository = "https://github.com/nbaksalyar/rust-streaming-http-parser"
+keywords = ["http", "web"]
+license = "MIT"
 
 [dependencies]
 libc = "0.1.7"
