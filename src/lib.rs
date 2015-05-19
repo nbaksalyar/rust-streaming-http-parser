@@ -269,83 +269,110 @@ pub fn version() -> String {
     }
 }
 
-#[test]
-fn test_version() {
-    assert_eq!("2.5.0", version());
-}
+#[cfg(test)]
+mod tests {
+    use super::{version, ParserHandler, Parser, parse};
 
-#[test]
-fn test_request_parser() {
-    struct TestRequestParser;
-    impl ParserHandler for TestRequestParser {
-        fn on_url(&self, url: &String) -> Option<u16> {
-            assert_eq!("/say_hello", url);
-            None
-        }
-        fn on_header_field(&self, hdr: &String) -> Option<u16> {
-            assert!(hdr == "Host" || hdr == "Content-Length");
-            None
-        }
-        fn on_header_value(&self, val: &String) -> Option<u16> {
-            assert!(val == "localhost.localdomain" || val == "11");
-            None
-        }
-        fn on_body(&self, body: &String) -> Option<u16> {
-            assert_eq!(body, "Hello world");
-            None
-        }
+    #[test]
+    fn test_version() {
+        assert_eq!("2.5.0", version());
     }
 
-    let req = "POST /say_hello HTTP/1.1\r\nContent-Length: 11\r\nHost: localhost.localdomain\r\n\r\nHello world";
+    #[test]
+    fn test_request_parser() {
+        struct TestRequestParser;
+        impl ParserHandler for TestRequestParser {
+            fn on_url(&self, url: &String) -> Option<u16> {
+                assert_eq!("/say_hello", url);
+                None
 
-    let handler = TestRequestParser;
-    let mut parser = Parser::request(&handler);
-    let parsed = parse(&mut parser, req.as_bytes());
+            }
+            fn on_header_field(&self, hdr: &String) -> Option<u16> {
+                assert!(hdr == "Host" || hdr == "Content-Length");
+                None
+            }
+            fn on_header_value(&self, val: &String) -> Option<u16> {
+                assert!(val == "localhost.localdomain" || val == "11");
+                None
+            }
+            fn on_body(&self, body: &String) -> Option<u16> {
+                assert_eq!(body, "Hello world");
+                None
+            }
+        }
 
-    assert!(parsed > 0);
-    assert_eq!((1, 1), parser.http_version());
-    assert_eq!("POST", parser.http_method());
-}
+        let req = "POST /say_hello HTTP/1.1\r\nContent-Length: 11\r\nHost: localhost.localdomain\r\n\r\nHello world";
 
-#[test]
-fn test_response_parser() {
-    struct TestResponseParser;
-    impl ParserHandler for TestResponseParser {
-        fn on_status(&self, status: &String) -> Option<u16> {
-            assert_eq!("OK", status);
-            None
-        }
-        fn on_header_field(&self, hdr: &String) -> Option<u16> {
-            assert_eq!("Host", hdr);
-            None
-        }
-        fn on_header_value(&self, val: &String) -> Option<u16> {
-            assert_eq!("localhost.localdomain", val);
-            None
-        }
+        let handler = TestRequestParser;
+        let mut parser = Parser::request(&handler);
+        let parsed = parse(&mut parser, req.as_bytes());
+
+        assert!(parsed > 0);
+        assert_eq!((1, 1), parser.http_version());
+        assert_eq!("POST", parser.http_method());
     }
 
-    let req = "HTTP/1.1 200 OK\r\nHost: localhost.localdomain\r\n\r\n";
+    #[test]
+    fn test_response_parser() {
+        struct TestResponseParser;
+        impl ParserHandler for TestResponseParser {
+            fn on_status(&self, status: &String) -> Option<u16> {
+                assert_eq!("OK", status);
+                None
+            }
+            fn on_header_field(&self, hdr: &String) -> Option<u16> {
+                assert_eq!("Host", hdr);
+                None
+            }
+            fn on_header_value(&self, val: &String) -> Option<u16> {
+                assert_eq!("localhost.localdomain", val);
+                None
+            }
+        }
 
-    let handler = TestResponseParser;
-    let mut parser = Parser::response(&handler);
-    let parsed = parse(&mut parser, req.as_bytes());
+        let req = "HTTP/1.1 200 OK\r\nHost: localhost.localdomain\r\n\r\n";
 
-    assert!(parsed > 0);
-    assert_eq!((1, 1), parser.http_version());
-    assert_eq!(200, parser.http_status_code());
-}
+        let handler = TestResponseParser;
+        let mut parser = Parser::response(&handler);
+        let parsed = parse(&mut parser, req.as_bytes());
 
-#[test]
-fn test_ws_upgrade() {
-    struct DummyHandler;
-    impl ParserHandler for DummyHandler {};
+        assert!(parsed > 0);
+        assert_eq!((1, 1), parser.http_version());
+        assert_eq!(200, parser.http_status_code());
+    }
 
-    let req = "GET / HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n";
+    #[test]
+    fn test_ws_upgrade() {
+        struct DummyHandler;
+        impl ParserHandler for DummyHandler {};
 
-    let handler = DummyHandler;
-    let mut parser = Parser::request(&handler);
-    parse(&mut parser, req.as_bytes());
+        let req = "GET / HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n";
 
-    assert_eq!(parser.is_upgrade(), true);
+        let handler = DummyHandler;
+        let mut parser = Parser::request(&handler);
+        parse(&mut parser, req.as_bytes());
+
+        assert_eq!(parser.is_upgrade(), true);
+    }
+
+    #[test]
+    fn test_error_status() {
+        struct DummyHandler;
+        impl ParserHandler for DummyHandler {
+            fn on_url(&self, _: &String) -> Option<u16> {
+                Some(1)
+            }
+            fn on_header_field(&self, _: &String) -> Option<u16> {
+                panic!("This callback shouldn't be executed!");
+            }
+        }
+
+        let req = "GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
+
+        let handler = DummyHandler;
+        let mut parser = Parser::request(&handler);
+        parse(&mut parser, req.as_bytes());
+
+        assert!(true);
+    }
 }
