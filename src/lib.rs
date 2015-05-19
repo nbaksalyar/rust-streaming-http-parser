@@ -5,8 +5,8 @@ use std::fmt;
 use std::ptr;
 use std::str;
 
-type HttpCallback = extern fn(*mut HttpParser) -> *mut libc::c_int;
-type HttpDataCallback = extern fn(*mut HttpParser, *const u32, libc::size_t) -> *mut libc::c_int;
+type HttpCallback = extern fn(*mut HttpParser) -> libc::c_int;
+type HttpDataCallback = extern fn(*mut HttpParser, *const u32, libc::size_t) -> libc::c_int;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -130,11 +130,15 @@ unsafe fn unwrap_parser<'a>(http: *mut HttpParser) -> &'a mut Parser<'a> {
 
 macro_rules! notify_fn_wrapper {
     ( $callback:ident ) => ({
-        extern "C" fn $callback(http: *mut HttpParser) -> *mut libc::c_int {
+        extern "C" fn $callback(http: *mut HttpParser) -> libc::c_int {
             unsafe {
-                unwrap_parser(http).handler.$callback();
+                let result = unwrap_parser(http).handler.$callback();
+                if result.is_none() {
+                    return 0;
+                } else {
+                    return result.unwrap() as libc::c_int;
+                }
             };
-            return 0 as *mut libc::c_int;
         };
         $callback
     });
@@ -142,7 +146,7 @@ macro_rules! notify_fn_wrapper {
 
 macro_rules! data_fn_wrapper {
     ( $callback:ident ) => ({
-        extern "C" fn $callback(http: *mut HttpParser, data: *const u32, size: libc::size_t) -> *mut libc::c_int {
+        extern "C" fn $callback(http: *mut HttpParser, data: *const u32, size: libc::size_t) -> libc::c_int {
             unsafe {
                 let mut dst = Vec::<u8>::with_capacity(size as usize);
                 dst.set_len(size as usize);
@@ -150,9 +154,13 @@ macro_rules! data_fn_wrapper {
 
                 let data = String::from_utf8(dst).unwrap();
 
-                unwrap_parser(http).handler.$callback(&data);
+                let result = unwrap_parser(http).handler.$callback(&data);
+                if result.is_none() {
+                    return 0;
+                } else {
+                    return result.unwrap() as libc::c_int;
+                }
             };
-            return 0 as *mut libc::c_int;
         };
 
         $callback
@@ -187,16 +195,16 @@ extern "C" {
 
 // High level Rust interface
 pub trait ParserHandler {
-    fn on_url(&self, &String) { }
-    fn on_status(&self, &String) { }
-    fn on_header_field(&self, &String) { }
-    fn on_header_value(&self, &String) { }
-    fn on_body(&self, &String) { }
-    fn on_message_begin(&self) { }
-    fn on_headers_complete(&self) { }
-    fn on_message_complete(&self) { }
-    fn on_chunk_header(&self) { }
-    fn on_chunk_complete(&self) { }
+    fn on_url(&self, &String) -> Option<u16> { None }
+    fn on_status(&self, &String) -> Option<u16> { None }
+    fn on_header_field(&self, &String) -> Option<u16> { None }
+    fn on_header_value(&self, &String) -> Option<u16> { None }
+    fn on_body(&self, &String) -> Option<u16> { None }
+    fn on_message_begin(&self) -> Option<u16> { None }
+    fn on_headers_complete(&self) -> Option<u16> { None }
+    fn on_message_complete(&self) -> Option<u16> { None }
+    fn on_chunk_header(&self) -> Option<u16> { None }
+    fn on_chunk_complete(&self) -> Option<u16> { None }
 }
 
 pub struct Parser<'a> {
@@ -270,10 +278,22 @@ fn test_version() {
 fn test_request_parser() {
     struct TestRequestParser;
     impl ParserHandler for TestRequestParser {
-        fn on_url(&self, url: &String) { assert_eq!("/say_hello", url); }
-        fn on_header_field(&self, hdr: &String) { assert!(hdr == "Host" || hdr == "Content-Length"); }
-        fn on_header_value(&self, val: &String) { assert!(val == "localhost.localdomain" || val == "11"); }
-        fn on_body(&self, body: &String) { assert_eq!(body, "Hello world"); }
+        fn on_url(&self, url: &String) -> Option<u16> {
+            assert_eq!("/say_hello", url);
+            None
+        }
+        fn on_header_field(&self, hdr: &String) -> Option<u16> {
+            assert!(hdr == "Host" || hdr == "Content-Length");
+            None
+        }
+        fn on_header_value(&self, val: &String) -> Option<u16> {
+            assert!(val == "localhost.localdomain" || val == "11");
+            None
+        }
+        fn on_body(&self, body: &String) -> Option<u16> {
+            assert_eq!(body, "Hello world");
+            None
+        }
     }
 
     let req = "POST /say_hello HTTP/1.1\r\nContent-Length: 11\r\nHost: localhost.localdomain\r\n\r\nHello world";
@@ -291,9 +311,18 @@ fn test_request_parser() {
 fn test_response_parser() {
     struct TestResponseParser;
     impl ParserHandler for TestResponseParser {
-        fn on_status(&self, status: &String) { assert_eq!("OK", status); }
-        fn on_header_field(&self, hdr: &String) { assert_eq!("Host", hdr); }
-        fn on_header_value(&self, val: &String) { assert_eq!("localhost.localdomain", val); }
+        fn on_status(&self, status: &String) -> Option<u16> {
+            assert_eq!("OK", status);
+            None
+        }
+        fn on_header_field(&self, hdr: &String) -> Option<u16> {
+            assert_eq!("Host", hdr);
+            None
+        }
+        fn on_header_value(&self, val: &String) -> Option<u16> {
+            assert_eq!("localhost.localdomain", val);
+            None
+        }
     }
 
     let req = "HTTP/1.1 200 OK\r\nHost: localhost.localdomain\r\n\r\n";
