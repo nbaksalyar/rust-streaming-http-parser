@@ -183,7 +183,6 @@ extern "C" {
 
     // Helper function to predictably use aligned bit-field struct
     fn http_get_struct_flags(parser: *const HttpParser) -> u32;
-    fn http_content_length(parser: *const HttpParser) -> u64;
 }
 
 // High level Rust interface
