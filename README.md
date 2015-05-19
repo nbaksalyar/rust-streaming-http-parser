@@ -28,8 +28,8 @@ Add the library to your `Cargo.toml` dependencies section:
 
 Or, for the edge version:
 
-	[dependency.http_muncher]
-	git = https://github.com/nbaksalyar/rust-streaming-http-parser
+	[dependency.http-muncher]
+	git = "https://github.com/nbaksalyar/rust-streaming-http-parser"
 
 And then you can use it this way:
 
@@ -59,30 +59,41 @@ impl ParserHandler for MyHandler {
 
     // And let's print the header values in a similar vein:
     fn on_header_value(&self, value: &String) -> Option<u16> {
-        println("\t {}", value);
+        println!("\t {}", value);
         None
     }
 }
 
-// Now we can create a parser instance with our callbacks handler:
-let callbacks_handler = MyHandler;
-let mut parser = Parser::request(&handler);
+fn main() {
+    // Now we can create a parser instance with our callbacks handler:
+    let callbacks_handler = MyHandler;
+    let mut parser = Parser::request(&callbacks_handler);
 
-// Let's define a mock HTTP request:
-let http_request = "GET / HTTP/1.0\r\n\
-                    Content-Type: text/plain\r\n\";
-                    Content-Length: 0\r\n\
-                    Hello: World\r\n\r\n";
+    // Let's define a mock HTTP request:
+    let http_request = "GET / HTTP/1.0\r\n\
+                        Content-Type: text/plain\r\n\
+                        Content-Length: 0\r\n\
+                        Hello: World\r\n\r\n";
 
-// And now we're ready to go!
-parser.parse(http_request.as_bytes());
+    // And now we're ready to go!
+    parser.parse(http_request.as_bytes());
 
-// Now that callbacks have been called, we can introspect
-// the parsing results - for instance, print the HTTP version:
-let (http_major, http_minor) = parser.http_version();
-println!("{}.{}", http_major, http_minor);
+    // Now that callbacks have been called, we can introspect
+    // the parsing results - for instance, print the HTTP version:
+    let (http_major, http_minor) = parser.http_version();
+    println!("{}.{}", http_major, http_minor);
+}
 
-// ... and the rest is almost the same - have fun!
+// Now execute "cargo run", and as a result you should see this output:
+
+// Content-Type: 
+//	 text/plain
+// Content-Length: 
+//	 0
+// Hello: 
+// 	 World
+
+// ... and the rest isf almost the same - have fun experimenting!
 ```
 
 Some more basic usage examples can be found in the library tests as well.
