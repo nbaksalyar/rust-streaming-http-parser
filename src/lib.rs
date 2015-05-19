@@ -210,7 +210,7 @@ fn _http_errno_description(errno: u8) -> String {
 /// The main parser interface.
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// struct MyHandler;
 /// impl ParserHandler for MyHandler {
 ///    fn on_header_field(&self, header: &String) -> Option<u16> {
@@ -218,7 +218,7 @@ fn _http_errno_description(errno: u8) -> String {
 ///        None
 ///    }
 ///    fn on_header_value(&self, value: &String) -> Option<u16> {
-///        println("\t {}", value);
+///        println!("\t {}", value);
 ///        None
 ///    }
 /// }
