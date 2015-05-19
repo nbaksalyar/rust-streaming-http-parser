@@ -33,8 +33,8 @@ struct HttpParser {
 }
 
 impl HttpParser {
-    fn new() -> HttpParser {
-        HttpParser {
+    fn new(parser_type: ParserType) -> HttpParser {
+        let mut p = HttpParser {
             _internal_state: 0,
             _nread: 0,
             _content_length: 0,
@@ -42,70 +42,13 @@ impl HttpParser {
             http_major: 0,
             http_minor: 0,
             data: 0 as *mut libc::c_void
-        }
+        };
+        unsafe { http_parser_init(&mut p as *mut _, parser_type); }
+        return p;
     }
 
-    fn status_code(&self) -> u16 {
-        unsafe {
-            let flags = http_get_struct_flags(self as *const _);
-            return (flags & 0xFFFF) as u16;
-        }
-    }
-
-    fn method_code(&self) -> u8 {
-        unsafe {
-            let flags = http_get_struct_flags(self as *const _);
-            return ((flags >> 16) & 0xFF) as u8;
-        }
-    }
-
-    fn http_errno(&self) -> u8 {
-        unsafe {
-            let flags = http_get_struct_flags(self as *const _);
-            return ((flags >> 24) & 0x7F) as u8;
-        }
-    }
-
-    fn upgrade(&self) -> bool {
-        unsafe {
-            let flags = http_get_struct_flags(self as *const _);
-            return ((flags >> 31) & 0x01) == 1;
-        }
-    }
-
-    fn http_method_str(&self) -> &str {
-        unsafe {
-            let method_str = http_method_str(self.method_code());
-            let buf = std::ffi::CStr::from_ptr(method_str);
-            return str::from_utf8(buf.to_bytes()).unwrap();
-        }
-    }
-
-    fn http_errno_name(&self) -> &str {
-        unsafe {
-            let method_str = http_errno_name(self.http_errno());
-            let buf = std::ffi::CStr::from_ptr(method_str);
-            return str::from_utf8(buf.to_bytes()).unwrap();
-        }
-    }
-
-    fn http_errno_description(&self) -> &str {
-        unsafe {
-            let method_str = http_errno_description(self.http_errno());
-            let buf = std::ffi::CStr::from_ptr(method_str);
-            return str::from_utf8(buf.to_bytes()).unwrap();
-        }
-    }
-}
-
-impl fmt::Debug for HttpParser {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        return write!(fmt, "status_code: {}\n\
-                            method: 0x{:X}, {}\n\
-                            errno: 0x{:X}, {}, {}\n\
-                            upgrade: {}\n\
-                            http_version: {}.{}",
-                      self.status_code(), self.method_code(), self.http_method_str(), self.http_errno(), self.http_errno_name(), self.http_errno_description(), self.upgrade(), self.http_major, self.http_minor);
+    fn http_body_is_final(&self) -> libc::c_int {
+        unsafe { return http_body_is_final(self); }
     }
 }
 
@@ -188,6 +131,7 @@ extern "C" {
     fn http_method_str(method_code: u8) -> *const libc::c_char;
     fn http_errno_name(http_errno: u8) -> *const libc::c_char;
     fn http_errno_description(http_errno: u8) -> *const libc::c_char;
+    fn http_body_is_final(parser: *const HttpParser) -> libc::c_int;
 
     // Helper function to predictably use aligned bit-field struct
     fn http_get_struct_flags(parser: *const HttpParser) -> u32;
@@ -207,53 +151,123 @@ pub trait ParserHandler {
     fn on_chunk_complete(&self) -> Option<u16> { None }
 }
 
+fn http_method_name(method_code: u8) -> String {
+    unsafe {
+        let method_str = http_method_str(method_code);
+        let buf = std::ffi::CStr::from_ptr(method_str);
+        return str::from_utf8(buf.to_bytes()).unwrap().to_string();
+    }
+}
+
+fn _http_errno_name(errno: u8) -> String {
+    unsafe {
+        let err_str = http_errno_name(errno);
+        let buf = std::ffi::CStr::from_ptr(err_str);
+        return str::from_utf8(buf.to_bytes()).unwrap().to_string();
+    }
+}
+
+fn _http_errno_description(errno: u8) -> String {
+    unsafe {
+        let err_str = http_errno_description(errno);
+        let buf = std::ffi::CStr::from_ptr(err_str);
+        return str::from_utf8(buf.to_bytes()).unwrap().to_string();
+    }
+}
+
 pub struct Parser<'a> {
     handler: &'a ParserHandler,
     state: HttpParser,
-    parser_type: ParserType
+    flags: u32
 }
 
 impl<'a> Parser<'a> {
     pub fn response(handler: &'a ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
-            state: HttpParser::new(),
-            parser_type: ParserType::HttpResponse
+            state: HttpParser::new(ParserType::HttpResponse),
+            flags: 0
         }
     }
 
     pub fn request(handler: &'a ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
-            state: HttpParser::new(),
-            parser_type: ParserType::HttpRequest
+            state: HttpParser::new(ParserType::HttpRequest),
+            flags: 0
         }
     }
 
     pub fn request_and_response(handler: &'a ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
-            state: HttpParser::new(),
-            parser_type: ParserType::HttpBoth
+            state: HttpParser::new(ParserType::HttpBoth),
+            flags: 0
         }
     }
 
-    pub fn http_version(&self) -> (u16, u16) { return (self.state.http_major, self.state.http_minor) }
-    pub fn http_status_code(&self) -> u16 { return self.state.status_code(); }
-    pub fn is_upgrade(&self) -> bool { return self.state.upgrade() }
-    pub fn http_method(&self) -> &str { return self.state.http_method_str(); }
+    pub fn parse(&mut self, data: &[u8]) -> usize {
+        unsafe {
+            self.state.data = self as *mut _ as *mut libc::c_void;
+
+            let size = http_parser_execute(&mut self.state as *mut _,
+                                           &CALLBACK_WRAPPERS as *const _,
+                                           data.as_ptr(),
+                                           data.len() as u64) as usize;
+
+            self.flags = http_get_struct_flags(&self.state as *const _);
+
+            return size;
+        }
+    }
+
+    pub fn http_version(&self) -> (u16, u16) {
+        (self.state.http_major, self.state.http_minor)
+    }
+
+    fn status_code(&self) -> u16 {
+        return (self.flags & 0xFFFF) as u16
+    }
+
+    pub fn http_method(&self) -> String {
+        let method_code = ((self.flags >> 16) & 0xFF) as u8;
+        return http_method_name(method_code);
+    }
+
+    fn http_errnum(&self) -> u8 {
+        return ((self.flags >> 24) & 0x7F) as u8
+    }
+
+    pub fn error(&self) -> String {
+        _http_errno_name(self.http_errnum())
+    }
+
+    pub fn error_description(&self) -> String {
+        _http_errno_description(self.http_errnum())
+    }
+
+    pub fn is_upgrade(&self) -> bool {
+        return ((self.flags >> 31) & 0x01) == 1;
+    }
+
+    pub fn is_final_chunk(&self) -> bool {
+        return self.state.http_body_is_final() == 1;
+    }
 }
 
-pub fn parse(parser: &mut Parser, data: &[u8]) -> usize {
-    unsafe {
-        http_parser_init(&mut parser.state as *mut _, parser.parser_type);
-
-        parser.state.data = &mut (*parser) as *mut _ as *mut libc::c_void;
-
-        return http_parser_execute(&mut parser.state as *mut _,
-                                         &CALLBACK_WRAPPERS as *const _,
-                                         data.as_ptr(),
-                                         data.len() as u64) as usize;
+impl<'a> fmt::Debug for Parser<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let (version_major, version_minor) = self.http_version();
+        return write!(fmt, "status_code: {}\n\
+                            method: {}\n\
+                            error: {}, {}\n\
+                            upgrade: {}\n\
+                            http_version: {}.{}",
+                      self.status_code(),
+                      self.http_method(),
+                      self.error(), self.error_description(),
+                      self.is_upgrade(),
+                      version_major, version_minor);
     }
 }
 
@@ -271,7 +285,7 @@ pub fn version() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{version, ParserHandler, Parser, parse};
+    use super::{version, ParserHandler, Parser};
 
     #[test]
     fn test_version() {
@@ -304,8 +318,9 @@ mod tests {
         let req = "POST /say_hello HTTP/1.1\r\nContent-Length: 11\r\nHost: localhost.localdomain\r\n\r\nHello world";
 
         let handler = TestRequestParser;
+
         let mut parser = Parser::request(&handler);
-        let parsed = parse(&mut parser, req.as_bytes());
+        let parsed = parser.parse(req.as_bytes());
 
         assert!(parsed > 0);
         assert_eq!((1, 1), parser.http_version());
@@ -333,12 +348,13 @@ mod tests {
         let req = "HTTP/1.1 200 OK\r\nHost: localhost.localdomain\r\n\r\n";
 
         let handler = TestResponseParser;
+
         let mut parser = Parser::response(&handler);
-        let parsed = parse(&mut parser, req.as_bytes());
+        let parsed = parser.parse(req.as_bytes());
 
         assert!(parsed > 0);
         assert_eq!((1, 1), parser.http_version());
-        assert_eq!(200, parser.http_status_code());
+        assert_eq!(200, parser.status_code());
     }
 
     #[test]
@@ -349,8 +365,9 @@ mod tests {
         let req = "GET / HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n";
 
         let handler = DummyHandler;
+
         let mut parser = Parser::request(&handler);
-        parse(&mut parser, req.as_bytes());
+        parser.parse(req.as_bytes());
 
         assert_eq!(parser.is_upgrade(), true);
     }
@@ -369,10 +386,28 @@ mod tests {
 
         let req = "GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
+        Parser::request(&DummyHandler).parse(req.as_bytes());
+        assert!(true);
+    }
+
+    #[test]
+    fn test_streaming() {
+        struct DummyHandler;
+        impl ParserHandler for DummyHandler {
+            fn on_url(&self, _: &String) -> Option<u16> {
+                None
+            }
+        }
+
+        let req = "GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
+
         let handler = DummyHandler;
         let mut parser = Parser::request(&handler);
-        parse(&mut parser, req.as_bytes());
 
-        assert!(true);
+        parser.parse(&req[0 .. 10].as_bytes());
+        assert_eq!(parser.http_version(), (0, 0));
+
+        parser.parse(&req[10 ..].as_bytes());
+        assert_eq!(parser.http_version(), (1, 1));
     }
 }
