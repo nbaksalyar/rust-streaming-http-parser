@@ -101,3 +101,9 @@ Some more basic usage examples can be found in the library tests as well.
 ## API documentation
 
 You can find [API docs here](http://nbaksalyar.github.io/rust-streaming-http-parser/).
+
+## License
+
+The MIT License (MIT)
+
+Copyright (c) 2015 Nikita Baksalyar <<nikita.baksalyar@gmail.com>>
