@@ -138,15 +138,47 @@ extern "C" {
 }
 
 // High level Rust interface
+
+/// Used to define a set of callbacks in your code.
+/// They would be called by the parser whenever new data is available.
+/// You should bear in mind that the data might get in your callbacks in a partial form.
+///
+/// Return `Option` as a result of each function call - either
+/// `None` for the "OK, go on" status, or `Some(1)` when you want to stop
+/// the parser after the function call is ended.
+///
+/// All callbacks provide a default no-op implementation (i.e. they just return `None`).
+///
 pub trait ParserHandler {
+    /// Called when the URL part of a request becomes available.
+    /// E.g. for `GET /forty-two HTTP/1.1` it will be called with `"/forty_two"` argument.
+    ///
+    /// It's not called in the response mode.
     fn on_url(&self, &String) -> Option<u16> { None }
+
+    /// Called when a response status becomes available.
+    ///
+    /// It's not called in the request mode.
     fn on_status(&self, &String) -> Option<u16> { None }
+
+    /// Called for each HTTP header key part.
     fn on_header_field(&self, &String) -> Option<u16> { None }
+
+    /// Called for each HTTP header value part.
     fn on_header_value(&self, &String) -> Option<u16> { None }
+
+    /// Called with body text as an argument when the new part becomes available.
     fn on_body(&self, &String) -> Option<u16> { None }
-    fn on_message_begin(&self) -> Option<u16> { None }
+
+    /// Notified when all available headers have been processed.
     fn on_headers_complete(&self) -> Option<u16> { None }
+
+    /// Notified when the parser receives first bytes to parse.
+    fn on_message_begin(&self) -> Option<u16> { None }
+
+    /// Notified when the parser has finished its job.
     fn on_message_complete(&self) -> Option<u16> { None }
+
     fn on_chunk_header(&self) -> Option<u16> { None }
     fn on_chunk_complete(&self) -> Option<u16> { None }
 }
@@ -175,6 +207,28 @@ fn _http_errno_description(errno: u8) -> String {
     }
 }
 
+/// The main parser interface.
+///
+/// # Example
+/// ```
+/// struct MyHandler;
+/// impl ParserHandler for MyHandler {
+///    fn on_header_field(&self, header: &String) -> Option<u16> {
+///        println!("{}: ", header);
+///        None
+///    }
+///    fn on_header_value(&self, value: &String) -> Option<u16> {
+///        println("\t {}", value);
+///        None
+///    }
+/// }
+/// 
+/// let http_request = "GET / HTTP/1.0\r\n\
+///                     Content-Length: 0\r\n\r\n";
+///
+/// Parser::request(&MyHandler).parse(http_request.as_bytes());
+/// ```
+
 pub struct Parser<'a> {
     handler: &'a ParserHandler,
     state: HttpParser,
@@ -182,6 +236,9 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    /// Creates a new parser instance for an HTTP response.
+    ///
+    /// Provide it with your `ParserHandler` trait implementation as an argument.
     pub fn response(handler: &'a ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
@@ -190,6 +247,9 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Creates a new parser instance for an HTTP request.
+    ///
+    /// Provide it with your `ParserHandler` trait implementation as an argument.
     pub fn request(handler: &'a ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
@@ -198,6 +258,9 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Creates a new parser instance to handle both HTTP requests and responses.  
+    ///
+    /// Provide it with your `ParserHandler` trait implementation as an argument.
     pub fn request_and_response(handler: &'a ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
@@ -206,6 +269,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses the provided `data` and returns a number of bytes read.
     pub fn parse(&mut self, data: &[u8]) -> usize {
         unsafe {
             self.state.data = self as *mut _ as *mut libc::c_void;
@@ -221,14 +285,17 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Returns an HTTP request or response version.
     pub fn http_version(&self) -> (u16, u16) {
         (self.state.http_major, self.state.http_minor)
     }
 
-    fn status_code(&self) -> u16 {
+    /// Returns an HTTP response status code (think *404*).
+    pub fn status_code(&self) -> u16 {
         return (self.flags & 0xFFFF) as u16
     }
 
+    /// Returns an HTTP method string (`GET`, `POST`, and so on).
     pub fn http_method(&self) -> String {
         let method_code = ((self.flags >> 16) & 0xFF) as u8;
         return http_method_name(method_code);
@@ -238,18 +305,28 @@ impl<'a> Parser<'a> {
         return ((self.flags >> 24) & 0x7F) as u8
     }
 
+    /// Checks if the last `parse` call was finished successfully.
+    /// Returns `true` if it wasn't.
+    pub fn has_error(&self) -> bool {
+        self.http_errnum() != 0x00
+    }
+
+    /// In case of a parsing error returns its mnemonic name.
     pub fn error(&self) -> String {
         _http_errno_name(self.http_errnum())
     }
 
+    /// In case of a parsing error returns its description.
     pub fn error_description(&self) -> String {
         _http_errno_description(self.http_errnum())
     }
 
+    /// Checks if an upgrade protocol (e.g. WebSocket) was requested.
     pub fn is_upgrade(&self) -> bool {
         return ((self.flags >> 31) & 0x01) == 1;
     }
 
+    /// Checks if it was the final body chunk.
     pub fn is_final_chunk(&self) -> bool {
         return self.state.http_body_is_final() == 1;
     }
@@ -271,6 +348,7 @@ impl<'a> fmt::Debug for Parser<'a> {
     }
 }
 
+/// Returns a version of the underlying `http-parser` library.
 pub fn version() -> String {
     unsafe {
         let v = http_parser_version();
@@ -323,6 +401,7 @@ mod tests {
         let parsed = parser.parse(req.as_bytes());
 
         assert!(parsed > 0);
+        assert!(!parser.has_error());
         assert_eq!((1, 1), parser.http_version());
         assert_eq!("POST", parser.http_method());
     }
@@ -353,6 +432,7 @@ mod tests {
         let parsed = parser.parse(req.as_bytes());
 
         assert!(parsed > 0);
+        assert!(!parser.has_error());
         assert_eq!((1, 1), parser.http_version());
         assert_eq!(200, parser.status_code());
     }
@@ -387,17 +467,12 @@ mod tests {
         let req = "GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
         Parser::request(&DummyHandler).parse(req.as_bytes());
-        assert!(true);
     }
 
     #[test]
     fn test_streaming() {
         struct DummyHandler;
-        impl ParserHandler for DummyHandler {
-            fn on_url(&self, _: &String) -> Option<u16> {
-                None
-            }
-        }
+        impl ParserHandler for DummyHandler {};
 
         let req = "GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
@@ -406,8 +481,24 @@ mod tests {
 
         parser.parse(&req[0 .. 10].as_bytes());
         assert_eq!(parser.http_version(), (0, 0));
+        assert!(!parser.has_error());
 
         parser.parse(&req[10 ..].as_bytes());
         assert_eq!(parser.http_version(), (1, 1));
+    }
+
+    #[test]
+    fn test_catch_error() {
+        struct DummyHandler;
+        impl ParserHandler for DummyHandler {};
+
+        let req = "UNKNOWN_METHOD / HTTP/3.0\r\nAnswer: 42\r\n\r\n";
+
+        let handler = DummyHandler;
+        let mut parser = Parser::request(&handler);
+
+        parser.parse(&req.as_bytes());
+        assert!(parser.has_error());
+        assert_eq!(parser.error(), "HPE_INVALID_METHOD");
     }
 }

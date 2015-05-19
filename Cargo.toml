@@ -1,5 +1,5 @@
 [package]
-name = "streaming-http-parser"
+name = "http-muncher"
 version = "0.1.0"
 authors = ["Nikita Baksalyar <nikita.baksalyar@gmail.com>"]
 build = "build.rs"
