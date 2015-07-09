@@ -54,52 +54,64 @@ struct HttpParserSettings {
 }
 
 #[inline]
-unsafe fn unwrap_parser<'a>(http: *mut HttpParser) -> &'a mut Parser<'a> {
-    return &mut *((*http).data as *mut Parser);
+unsafe fn unwrap_parser<'a, H>(http: *mut HttpParser) -> &'a mut Parser<'a, H> {
+    return &mut *((*http).data as *mut Parser<H>);
 }
 
 macro_rules! notify_fn_wrapper {
     ( $callback:ident ) => ({
-        extern "C" fn $callback(http: *mut HttpParser) -> libc::c_int {
-            match unsafe { unwrap_parser(http).handler.$callback() } {
+        extern "C" fn $callback<H: ParserHandler>(http: *mut HttpParser) -> libc::c_int {
+            let mut parser: &mut Parser<H> = unsafe {
+                unwrap_parser(http)
+            };
+
+            match parser.handler.$callback() {
                 Some(result) => result as libc::c_int,
                 None => 0,
             }
         };
 
-        $callback
+        $callback::<H>
     });
 }
 
 macro_rules! data_fn_wrapper {
     ( $callback:ident ) => ({
-        extern "C" fn $callback(http: *mut HttpParser, data: *const u32, size: libc::size_t) -> libc::c_int {
+        extern "C" fn $callback<H: ParserHandler>(http: *mut HttpParser, data: *const u32, size: libc::size_t) -> libc::c_int {
             let slice = unsafe {
                 std::slice::from_raw_parts(data as *const u8, size as usize)
             };
 
-            match unsafe { unwrap_parser(http).handler.$callback(slice) } {
+            let mut parser: &mut Parser<H> = unsafe {
+                unwrap_parser(http)
+            };
+
+            match parser.handler.$callback(slice) {
                 Some(result) => result as libc::c_int,
                 None => 0
             }
         };
 
-        $callback
+        $callback::<H>
     });
 }
 
-static CALLBACK_WRAPPERS: HttpParserSettings = HttpParserSettings {
-    on_url: data_fn_wrapper!(on_url),
-    on_message_begin: notify_fn_wrapper!(on_message_begin),
-    on_status: data_fn_wrapper!(on_status),
-    on_header_field: data_fn_wrapper!(on_header_field),
-    on_header_value: data_fn_wrapper!(on_header_value),
-    on_headers_complete: notify_fn_wrapper!(on_headers_complete),
-    on_body: data_fn_wrapper!(on_body),
-    on_message_complete: notify_fn_wrapper!(on_message_complete),
-    on_chunk_header: notify_fn_wrapper!(on_chunk_header),
-    on_chunk_complete: notify_fn_wrapper!(on_chunk_complete)
-};
+impl HttpParserSettings {
+    fn new<H: ParserHandler>() -> HttpParserSettings {
+        HttpParserSettings {
+           on_url: data_fn_wrapper!(on_url),
+           on_message_begin: notify_fn_wrapper!(on_message_begin),
+           on_status: data_fn_wrapper!(on_status),
+           on_header_field: data_fn_wrapper!(on_header_field),
+           on_header_value: data_fn_wrapper!(on_header_value),
+           on_headers_complete: notify_fn_wrapper!(on_headers_complete),
+           on_body: data_fn_wrapper!(on_body),
+           on_message_complete: notify_fn_wrapper!(on_message_complete),
+           on_chunk_header: notify_fn_wrapper!(on_chunk_header),
+           on_chunk_complete: notify_fn_wrapper!(on_chunk_complete)
+       }
+    }
+}
 
 #[allow(dead_code)]
 extern "C" {
@@ -208,17 +220,17 @@ fn _http_errno_description(errno: u8) -> &'static str {
 /// Parser::request(&MyHandler).parse(http_request);
 /// ```
 
-pub struct Parser<'a> {
-    handler: &'a mut ParserHandler,
+pub struct Parser<'a, H: 'a> {
+    handler: &'a mut H,
     state: HttpParser,
     flags: u32
 }
 
-impl<'a> Parser<'a> {
+impl<'a, H: ParserHandler> Parser<'a, H> {
     /// Creates a new parser instance for an HTTP response.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn response(handler: &'a mut ParserHandler) -> Parser<'a> {
+    pub fn response(handler: &'a mut H) -> Parser<'a, H> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpResponse),
@@ -229,7 +241,7 @@ impl<'a> Parser<'a> {
     /// Creates a new parser instance for an HTTP request.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn request(handler: &'a mut ParserHandler) -> Parser<'a> {
+    pub fn request(handler: &'a mut H) -> Parser<'a, H> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpRequest),
@@ -240,7 +252,7 @@ impl<'a> Parser<'a> {
     /// Creates a new parser instance to handle both HTTP requests and responses.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn request_and_response(handler: &'a mut ParserHandler) -> Parser<'a> {
+    pub fn request_and_response(handler: &'a mut H) -> Parser<'a, H> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpBoth),
@@ -254,7 +266,7 @@ impl<'a> Parser<'a> {
             self.state.data = self as *mut _ as *mut libc::c_void;
 
             let size = http_parser_execute(&mut self.state as *mut _,
-                                           &CALLBACK_WRAPPERS as *const _,
+                                           &HttpParserSettings::new::<H>() as *const _,
                                            data.as_ptr(),
                                            data.len() as u64) as usize;
 
@@ -309,9 +321,13 @@ impl<'a> Parser<'a> {
     pub fn is_final_chunk(&self) -> bool {
         return self.state.http_body_is_final() == 1;
     }
+
+    pub fn get(&mut self) -> &mut H {
+        self.handler
+    }
 }
 
-impl<'a> std::fmt::Debug for Parser<'a> {
+impl<'a, H: ParserHandler> std::fmt::Debug for Parser<'a, H> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         let (version_major, version_minor) = self.http_version();
         return write!(fmt, "status_code: {}\n\
@@ -459,9 +475,10 @@ mod tests {
 
         let mut handler = DummyHandler { url_parsed: false };
 
-        Parser::request(&mut handler).parse(req);
+        let mut parser = Parser::request(&mut handler);
+        parser.parse(req);
 
-        assert!(handler.url_parsed);
+        assert!(parser.get().url_parsed);
     }
 
     #[test]
