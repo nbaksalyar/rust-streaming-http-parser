@@ -54,7 +54,7 @@ struct HttpParserSettings {
 }
 
 #[inline]
-unsafe fn unwrap_parser<'a, H>(http: *mut HttpParser) -> &'a mut Parser<'a, H> {
+unsafe fn unwrap_parser<'a, H>(http: *mut HttpParser) -> &'a mut Parser<H> {
     return &mut *((*http).data as *mut Parser<H>);
 }
 
@@ -220,17 +220,17 @@ fn _http_errno_description(errno: u8) -> &'static str {
 /// Parser::request(&MyHandler).parse(http_request);
 /// ```
 
-pub struct Parser<'a, H: 'a> {
-    handler: &'a mut H,
+pub struct Parser<H> {
+    handler: H,
     state: HttpParser,
     flags: u32
 }
 
-impl<'a, H: ParserHandler> Parser<'a, H> {
+impl<H: ParserHandler> Parser<H> {
     /// Creates a new parser instance for an HTTP response.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn response(handler: &'a mut H) -> Parser<'a, H> {
+    pub fn response(handler: H) -> Parser<H> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpResponse),
@@ -241,7 +241,7 @@ impl<'a, H: ParserHandler> Parser<'a, H> {
     /// Creates a new parser instance for an HTTP request.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn request(handler: &'a mut H) -> Parser<'a, H> {
+    pub fn request(handler: H) -> Parser<H> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpRequest),
@@ -252,7 +252,7 @@ impl<'a, H: ParserHandler> Parser<'a, H> {
     /// Creates a new parser instance to handle both HTTP requests and responses.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn request_and_response(handler: &'a mut H) -> Parser<'a, H> {
+    pub fn request_and_response(handler: H) -> Parser<H> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpBoth),
@@ -323,11 +323,11 @@ impl<'a, H: ParserHandler> Parser<'a, H> {
     }
 
     pub fn get(&mut self) -> &mut H {
-        self.handler
+        &mut self.handler
     }
 }
 
-impl<'a, H: ParserHandler> std::fmt::Debug for Parser<'a, H> {
+impl<H: ParserHandler> std::fmt::Debug for Parser<H> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         let (version_major, version_minor) = self.http_version();
         return write!(fmt, "status_code: {}\n\
