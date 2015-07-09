@@ -133,33 +133,33 @@ pub trait ParserHandler {
     /// E.g. for `GET /forty-two HTTP/1.1` it will be called with `"/forty_two"` argument.
     ///
     /// It's not called in the response mode.
-    fn on_url(&self, &[u8]) -> Option<u16> { None }
+    fn on_url(&mut self, &[u8]) -> Option<u16> { None }
 
     /// Called when a response status becomes available.
     ///
     /// It's not called in the request mode.
-    fn on_status(&self, &[u8]) -> Option<u16> { None }
+    fn on_status(&mut self, &[u8]) -> Option<u16> { None }
 
     /// Called for each HTTP header key part.
-    fn on_header_field(&self, &[u8]) -> Option<u16> { None }
+    fn on_header_field(&mut self, &[u8]) -> Option<u16> { None }
 
     /// Called for each HTTP header value part.
-    fn on_header_value(&self, &[u8]) -> Option<u16> { None }
+    fn on_header_value(&mut self, &[u8]) -> Option<u16> { None }
 
     /// Called with body text as an argument when the new part becomes available.
-    fn on_body(&self, &[u8]) -> Option<u16> { None }
+    fn on_body(&mut self, &[u8]) -> Option<u16> { None }
 
     /// Notified when all available headers have been processed.
-    fn on_headers_complete(&self) -> Option<u16> { None }
+    fn on_headers_complete(&mut self) -> Option<u16> { None }
 
     /// Notified when the parser receives first bytes to parse.
-    fn on_message_begin(&self) -> Option<u16> { None }
+    fn on_message_begin(&mut self) -> Option<u16> { None }
 
     /// Notified when the parser has finished its job.
-    fn on_message_complete(&self) -> Option<u16> { None }
+    fn on_message_complete(&mut self) -> Option<u16> { None }
 
-    fn on_chunk_header(&self) -> Option<u16> { None }
-    fn on_chunk_complete(&self) -> Option<u16> { None }
+    fn on_chunk_header(&mut self) -> Option<u16> { None }
+    fn on_chunk_complete(&mut self) -> Option<u16> { None }
 }
 
 fn http_method_name(method_code: u8) -> &'static str {
@@ -209,7 +209,7 @@ fn _http_errno_description(errno: u8) -> &'static str {
 /// ```
 
 pub struct Parser<'a> {
-    handler: &'a ParserHandler,
+    handler: &'a mut ParserHandler,
     state: HttpParser,
     flags: u32
 }
@@ -218,7 +218,7 @@ impl<'a> Parser<'a> {
     /// Creates a new parser instance for an HTTP response.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn response(handler: &'a ParserHandler) -> Parser<'a> {
+    pub fn response(handler: &'a mut ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpResponse),
@@ -229,7 +229,7 @@ impl<'a> Parser<'a> {
     /// Creates a new parser instance for an HTTP request.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn request(handler: &'a ParserHandler) -> Parser<'a> {
+    pub fn request(handler: &'a mut ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpRequest),
@@ -240,7 +240,7 @@ impl<'a> Parser<'a> {
     /// Creates a new parser instance to handle both HTTP requests and responses.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn request_and_response(handler: &'a ParserHandler) -> Parser<'a> {
+    pub fn request_and_response(handler: &'a mut ParserHandler) -> Parser<'a> {
         Parser {
             handler: handler,
             state: HttpParser::new(ParserType::HttpBoth),
@@ -354,22 +354,22 @@ mod tests {
         struct TestRequestParser;
 
         impl ParserHandler for TestRequestParser {
-            fn on_url(&self, url: &[u8]) -> Option<u16> {
+            fn on_url(&mut self, url: &[u8]) -> Option<u16> {
                 assert_eq!(b"/say_hello", url);
                 None
             }
 
-            fn on_header_field(&self, hdr: &[u8]) -> Option<u16> {
+            fn on_header_field(&mut self, hdr: &[u8]) -> Option<u16> {
                 assert!(hdr == b"Host" || hdr == b"Content-Length");
                 None
             }
 
-            fn on_header_value(&self, val: &[u8]) -> Option<u16> {
+            fn on_header_value(&mut self, val: &[u8]) -> Option<u16> {
                 assert!(val == b"localhost.localdomain" || val == b"11");
                 None
             }
 
-            fn on_body(&self, body: &[u8]) -> Option<u16> {
+            fn on_body(&mut self, body: &[u8]) -> Option<u16> {
                 assert_eq!(body, b"Hello world");
                 None
             }
@@ -377,9 +377,9 @@ mod tests {
 
         let req = b"POST /say_hello HTTP/1.1\r\nContent-Length: 11\r\nHost: localhost.localdomain\r\n\r\nHello world";
 
-        let handler = TestRequestParser;
+        let mut handler = TestRequestParser;
 
-        let mut parser = Parser::request(&handler);
+        let mut parser = Parser::request(&mut handler);
         let parsed = parser.parse(req);
 
         assert!(parsed > 0);
@@ -393,17 +393,17 @@ mod tests {
         struct TestResponseParser;
 
         impl ParserHandler for TestResponseParser {
-            fn on_status(&self, status: &[u8]) -> Option<u16> {
+            fn on_status(&mut self, status: &[u8]) -> Option<u16> {
                 assert_eq!(b"OK", status);
                 None
             }
 
-            fn on_header_field(&self, hdr: &[u8]) -> Option<u16> {
+            fn on_header_field(&mut self, hdr: &[u8]) -> Option<u16> {
                 assert_eq!(b"Host", hdr);
                 None
             }
 
-            fn on_header_value(&self, val: &[u8]) -> Option<u16> {
+            fn on_header_value(&mut self, val: &[u8]) -> Option<u16> {
                 assert_eq!(b"localhost.localdomain", val);
                 None
             }
@@ -411,9 +411,9 @@ mod tests {
 
         let req = b"HTTP/1.1 200 OK\r\nHost: localhost.localdomain\r\n\r\n";
 
-        let handler = TestResponseParser;
+        let mut handler = TestResponseParser;
 
-        let mut parser = Parser::response(&handler);
+        let mut parser = Parser::response(&mut handler);
         let parsed = parser.parse(req);
 
         assert!(parsed > 0);
@@ -430,9 +430,9 @@ mod tests {
 
         let req = b"GET / HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n";
 
-        let handler = DummyHandler;
+        let mut handler = DummyHandler;
 
-        let mut parser = Parser::request(&handler);
+        let mut parser = Parser::request(&mut handler);
         parser.parse(req);
 
         assert_eq!(parser.is_upgrade(), true);
@@ -440,21 +440,28 @@ mod tests {
 
     #[test]
     fn test_error_status() {
-        struct DummyHandler;
+        struct DummyHandler {
+            url_parsed: bool,
+        }
 
         impl ParserHandler for DummyHandler {
-            fn on_url(&self, _: &[u8]) -> Option<u16> {
+            fn on_url(&mut self, _: &[u8]) -> Option<u16> {
+                self.url_parsed = true;
                 Some(1)
             }
 
-            fn on_header_field(&self, _: &[u8]) -> Option<u16> {
+            fn on_header_field(&mut self, _: &[u8]) -> Option<u16> {
                 panic!("This callback shouldn't be executed!");
             }
         }
 
         let req = b"GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
-        Parser::request(&DummyHandler).parse(req);
+        let mut handler = DummyHandler { url_parsed: false };
+
+        Parser::request(&mut handler).parse(req);
+
+        assert!(handler.url_parsed);
     }
 
     #[test]
@@ -465,8 +472,8 @@ mod tests {
 
         let req = b"GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
-        let handler = DummyHandler;
-        let mut parser = Parser::request(&handler);
+        let mut handler = DummyHandler;
+        let mut parser = Parser::request(&mut handler);
 
         parser.parse(&req[0..10]);
 
@@ -486,8 +493,8 @@ mod tests {
 
         let req = b"UNKNOWN_METHOD / HTTP/3.0\r\nAnswer: 42\r\n\r\n";
 
-        let handler = DummyHandler;
-        let mut parser = Parser::request(&handler);
+        let mut handler = DummyHandler;
+        let mut parser = Parser::request(&mut handler);
 
         parser.parse(req);
 
