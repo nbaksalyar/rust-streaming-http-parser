@@ -1,6 +1,6 @@
 [package]
 name = "http-muncher"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Nikita Baksalyar <nikita.baksalyar@gmail.com>"]
 build = "build.rs"
 description = "Rust Streaming HTTP parser based on joyent/http-parser"
