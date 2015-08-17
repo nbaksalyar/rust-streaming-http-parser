@@ -131,7 +131,7 @@ extern "C" {
 /// `true` for the "OK, go on" status, or `false` when you want to stop
 /// the parser after the function call has ended.
 ///
-/// All callbacks provide a default no-op implementation (i.e. they just return `None`).
+/// All callbacks provide a default no-op implementation (i.e. they just return `true`).
 ///
 pub trait ParserHandler {
     /// Called when the URL part of a request becomes available.
