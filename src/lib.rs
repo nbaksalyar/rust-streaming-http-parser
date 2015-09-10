@@ -261,7 +261,7 @@ impl<H: ParserHandler> Parser<H> {
             let size = http_parser_execute(&mut self.state as *mut _,
                                            &HttpParserSettings::new::<H>() as *const _,
                                            data.as_ptr(),
-                                           data.len() as u64) as usize;
+                                           data.len() as libc::size_t) as usize;
 
             self.flags = http_get_struct_flags(&self.state as *const _);
 
