@@ -2,7 +2,7 @@
 name = "http-muncher"
 version = "0.2.1"
 dependencies = [
- "gcc 0.3.13 (git+https://github.com/alexcrichton/gcc-rs)",
+ "gcc 0.3.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -18,7 +18,7 @@ dependencies = [
 [[package]]
 name = "gcc"
 version = "0.3.13"
-source = "git+https://github.com/alexcrichton/gcc-rs#a7bcbe58c605493f769bf45a858d99f4a9926dc1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "advapi32-sys 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",

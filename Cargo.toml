@@ -13,4 +13,4 @@ license = "MIT"
 libc = "0.1.7"
 
 [build-dependencies]
-gcc = { git = "https://github.com/alexcrichton/gcc-rs" }
+gcc = "0.3.*"
