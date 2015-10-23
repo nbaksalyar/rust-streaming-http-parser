@@ -1,6 +1,7 @@
 # HttpMuncher: Rust Streaming HTTP parser
 
 ![Build Status](https://travis-ci.org/nbaksalyar/rust-streaming-http-parser.svg?branch=master)
+[![](http://meritbadge.herokuapp.com/http-muncher)](https://crates.io/crates/http-muncher)
 
 Rust wrapper for Joyent's [http-parser](https://github.com/joyent/http-parser) library.
 
