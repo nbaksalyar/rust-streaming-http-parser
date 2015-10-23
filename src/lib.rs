@@ -1,10 +1,12 @@
 extern crate libc;
 
+use std::marker::Send;
+
 type HttpCallback = extern fn(*mut HttpParser) -> libc::c_int;
 type HttpDataCallback = extern fn(*mut HttpParser, *const u32, libc::size_t) -> libc::c_int;
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum ParserType {
     HttpRequest,
     HttpResponse,
@@ -26,6 +28,8 @@ struct HttpParser {
     // Public Interface
     data: *mut libc::c_void
 }
+
+unsafe impl Send for HttpParser { }
 
 impl HttpParser {
     fn new(parser_type: ParserType) -> HttpParser {
@@ -216,8 +220,11 @@ fn _http_errno_description(errno: u8) -> &'static str {
 pub struct Parser<H> {
     handler: H,
     state: HttpParser,
+    parser_type: ParserType,
     flags: u32
 }
+
+unsafe impl<H: ParserHandler> Send for Parser<H> { }
 
 impl<H: ParserHandler> Parser<H> {
     /// Creates a new parser instance for an HTTP response.
@@ -226,6 +233,7 @@ impl<H: ParserHandler> Parser<H> {
     pub fn response(handler: H) -> Parser<H> {
         Parser {
             handler: handler,
+            parser_type: ParserType::HttpResponse,
             state: HttpParser::new(ParserType::HttpResponse),
             flags: 0
         }
@@ -237,6 +245,7 @@ impl<H: ParserHandler> Parser<H> {
     pub fn request(handler: H) -> Parser<H> {
         Parser {
             handler: handler,
+            parser_type: ParserType::HttpRequest,
             state: HttpParser::new(ParserType::HttpRequest),
             flags: 0
         }
@@ -248,6 +257,7 @@ impl<H: ParserHandler> Parser<H> {
     pub fn request_and_response(handler: H) -> Parser<H> {
         Parser {
             handler: handler,
+            parser_type: ParserType::HttpBoth,
             state: HttpParser::new(ParserType::HttpBoth),
             flags: 0
         }
@@ -386,7 +396,7 @@ mod tests {
 
         let req = b"POST /say_hello HTTP/1.1\r\nContent-Length: 11\r\nHost: localhost.localdomain\r\n\r\nHello world";
 
-        let mut handler = TestRequestParser;
+        let handler = TestRequestParser;
 
         let mut parser = Parser::request(handler);
         let parsed = parser.parse(req);
@@ -420,7 +430,7 @@ mod tests {
 
         let req = b"HTTP/1.1 200 OK\r\nHost: localhost.localdomain\r\n\r\n";
 
-        let mut handler = TestResponseParser;
+        let handler = TestResponseParser;
 
         let mut parser = Parser::response(handler);
         let parsed = parser.parse(req);
@@ -439,7 +449,7 @@ mod tests {
 
         let req = b"GET / HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n";
 
-        let mut handler = DummyHandler;
+        let handler = DummyHandler;
 
         let mut parser = Parser::request(handler);
         parser.parse(req);
@@ -461,13 +471,12 @@ mod tests {
 
             fn on_header_field(&mut self, _: &[u8]) -> bool {
                 panic!("This callback shouldn't be executed!");
-                true
             }
         }
 
         let req = b"GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
-        let mut handler = DummyHandler { url_parsed: false };
+        let handler = DummyHandler { url_parsed: false };
 
         let mut parser = Parser::request(handler);
         parser.parse(req);
@@ -483,7 +492,7 @@ mod tests {
 
         let req = b"GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
-        let mut handler = DummyHandler;
+        let handler = DummyHandler;
         let mut parser = Parser::request(handler);
 
         parser.parse(&req[0..10]);
@@ -504,7 +513,7 @@ mod tests {
 
         let req = b"UNKNOWN_METHOD / HTTP/3.0\r\nAnswer: 42\r\n\r\n";
 
-        let mut handler = DummyHandler;
+        let handler = DummyHandler;
         let mut parser = Parser::request(handler);
 
         parser.parse(req);
