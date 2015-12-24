@@ -25,7 +25,7 @@ Here's why:
 Add the library to your `Cargo.toml` dependencies section:
 
 	[dependencies]
-	http-muncher = "0.2.2"
+	http-muncher = "0.2.*"
 
 Or, for the edge version:
 
