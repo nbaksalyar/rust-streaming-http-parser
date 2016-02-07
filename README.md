@@ -3,7 +3,7 @@
 ![Build Status](https://travis-ci.org/nbaksalyar/rust-streaming-http-parser.svg?branch=master)
 [![](http://meritbadge.herokuapp.com/http-muncher)](https://crates.io/crates/http-muncher)
 
-Rust wrapper for Joyent's [http-parser](https://github.com/joyent/http-parser) library.
+Rust wrapper for NodeJS [http-parser](https://github.com/nodejs/http-parser) library.
 
 It's intended to be used as an HTTP/1.x protocol handler in Rust-based web servers.
 
@@ -13,7 +13,7 @@ Why not write a brand new HTTP parser from scratch in Rust or just use an existi
 
 Here's why:
 
-* Joyent's library is based on a full-featured and robust [nginx](http://nginx.org)'s HTTP parser, and it's safe, fast, and lightweight by design;
+* NodeJS HTTP parser library is based on a full-featured and robust [nginx](http://nginx.org)'s HTTP parser, and it's safe, fast, and lightweight by design;
 * It's compatible with HTTP/1.1, including upgrade connections and chunked responses;
 * I haven't found a decent HTTP parser that is capable of streamed parsing, i.e. the one that can eagerly use partial data that comes from a TCP socket;
 * Rust's FFI has little to no overhead;
@@ -25,7 +25,7 @@ Here's why:
 Add the library to your `Cargo.toml` dependencies section:
 
 	[dependencies]
-	http-muncher = "0.2.*"
+	http-muncher = "0.2"
 
 Or, for the edge version:
 
