@@ -49,19 +49,19 @@ impl ParserHandler for MyHandler {
     // Let's try to handle headers: the following callback function will be
     // called when parser founds a header in the HTTP stream.
 
-    fn on_header_field(&self, header: &[u8]) -> Option<u16> {
+    fn on_header_field(&self, header: &[u8]) -> bool {
         // Print the received header key
         println!("{}: ", header);
 
         // We have nothing to say to parser, and we'd like
-        // it to continue its work - so let's return "None".
-        None
+        // it to continue its work - so let's return "false".
+        false
     }
 
     // And let's print the header values in a similar vein:
-    fn on_header_value(&self, value: &[u8]) -> Option<u16> {
+    fn on_header_value(&self, value: &[u8]) -> bool {
         println!("\t {}", value);
-        None
+        false
     }
 }
 
