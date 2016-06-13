@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        assert_eq!((2, 6, 0), version());
+        assert_eq!((2, 7, 0), version());
     }
 
     #[test]
