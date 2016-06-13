@@ -1,27 +1,15 @@
 # Appveyor configuration template for Rust
 # https://github.com/starkat99/appveyor-rust
 
-## Operating System (VM environment) ##
-
 # Rust needs at least Visual Studio 2013 Appveyor OS for MSVC targets.
 os: Visual Studio 2015
 
-## Build Matrix ##
-
 environment:
   matrix:
-
-### MSVC Toolchains ###
-
-  # Stable 64-bit MSVC
     - channel: stable
       target: x86_64-pc-windows-msvc
-
-### GNU Toolchains ###
-
-  # Stable 64-bit GNU
     - channel: stable
-      target: x86_64-pc-windows-gnu
+      target: i686-pc-windows-gnu
 
 ## Install Script ##
 
