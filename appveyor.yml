@@ -26,6 +26,7 @@ environment:
 ## Install Script ##
 
 install:
+- ps: git submodule update --init --recursive
 - ps: .\appveyor_rust_install.ps1
 
 # 'cargo test' takes care of building for us, so disable Appveyor's build stage. This prevents
