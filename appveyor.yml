@@ -1,0 +1,39 @@
+# Appveyor configuration template for Rust
+# https://github.com/starkat99/appveyor-rust
+
+## Operating System (VM environment) ##
+
+# Rust needs at least Visual Studio 2013 Appveyor OS for MSVC targets.
+os: Visual Studio 2015
+
+## Build Matrix ##
+
+environment:
+  matrix:
+
+### MSVC Toolchains ###
+
+  # Stable 64-bit MSVC
+    - channel: stable
+      target: x86_64-pc-windows-msvc
+
+### GNU Toolchains ###
+
+  # Stable 64-bit GNU
+    - channel: stable
+      target: x86_64-pc-windows-gnu
+
+## Install Script ##
+
+install:
+- ps: .\appveyor_rust_install.ps1
+
+# 'cargo test' takes care of building for us, so disable Appveyor's build stage. This prevents
+# the "directory does not contain a project or solution file" error.
+build: false
+
+# Uses 'cargo test' to run tests. Alternatively, the project may call compiled programs directly or
+# perform other testing commands. Rust will automatically be placed in the PATH environment
+# variable.
+test_script:
+- cmd: cargo test --verbose
