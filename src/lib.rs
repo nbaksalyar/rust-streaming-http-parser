@@ -41,6 +41,10 @@ impl HttpParser {
     fn http_body_is_final(&self) -> libc::c_int {
         unsafe { return http_body_is_final(self); }
     }
+
+    fn http_should_keep_alive(&self) -> libc::c_int {
+        unsafe { http_should_keep_alive(self) }
+    }
 }
 
 #[repr(C)]
@@ -123,6 +127,8 @@ extern "C" {
 
     // Helper function to predictably use aligned bit-field struct
     fn http_get_struct_flags(parser: *const HttpParser) -> u32;
+
+    fn http_should_keep_alive(parser: *const HttpParser) -> libc::c_int;
 }
 
 // High level Rust interface
@@ -323,6 +329,14 @@ impl<H: ParserHandler> Parser<H> {
     /// Checks if it was the final body chunk.
     pub fn is_final_chunk(&self) -> bool {
         return self.state.http_body_is_final() == 1;
+    }
+
+    /// If `should_keep_alive()` in the `on_headers_complete` or `on_message_complete` callback
+    /// returns 0, then this should be the last message on the connection.
+    /// If you are the server, respond with the "Connection: close" header.
+    /// If you are the client, close the connection.
+    pub fn should_keep_alive(&self) -> bool {
+        self.state.http_should_keep_alive() == 1
     }
 
     pub fn get(&mut self) -> &mut H {
