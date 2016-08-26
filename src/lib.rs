@@ -223,6 +223,7 @@ fn _http_errno_description(errno: u8) -> &'static str {
 /// Parser::request(&MyHandler).parse(http_request);
 /// ```
 
+#[allow(dead_code)]
 pub struct Parser<H> {
     handler: H,
     state: HttpParser,
