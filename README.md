@@ -104,6 +104,11 @@ Some more basic usage examples can be found in the library tests as well.
 
 You can find [API docs here](https://docs.rs/http-muncher/).
 
+## Alternative libraries
+
+* [http-parser-rs](https://github.com/magic003/http-parser-rs) - Rust port of NodeJS HTTP parser (without FFI usage).
+* [httparse](https://github.com/seanmonstar/httparse) - pure Rust HTTP parser implementation.
+
 ## License
 
 The MIT License (MIT)
