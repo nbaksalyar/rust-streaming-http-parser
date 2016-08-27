@@ -26,7 +26,7 @@ Here's why:
 Add the library to your `Cargo.toml` dependencies section:
 
 	[dependencies]
-	http-muncher = "0.2"
+	http-muncher = "0.3"
 
 Or, for the edge version:
 
@@ -48,10 +48,10 @@ impl ParserHandler for MyHandler {
     // Now we can define our callbacks here.
     //
     // Let's try to handle headers: the following callback function will be
-    // called when parser founds a header in the HTTP stream.
+    // called when parser founds a header chunk in the HTTP stream.
 
-    fn on_header_field(&self, header: &[u8]) -> bool {
-        // Print the received header key
+    fn on_header_field(&self, parser: &mut Parser, header: &[u8]) -> bool {
+        // Print the received header key part
         println!("{}: ", header);
 
         // We have nothing to say to parser, and we'd like
@@ -59,8 +59,8 @@ impl ParserHandler for MyHandler {
         false
     }
 
-    // And let's print the header values in a similar vein:
-    fn on_header_value(&self, value: &[u8]) -> bool {
+    // And let's print the header value chunks in a similar vein:
+    fn on_header_value(&self, parser: &mut Parser, value: &[u8]) -> bool {
         println!("\t {}", value);
         false
     }
@@ -69,7 +69,7 @@ impl ParserHandler for MyHandler {
 fn main() {
     // Now we can create a parser instance with our callbacks handler:
     let callbacks_handler = MyHandler;
-    let mut parser = Parser::request(&callbacks_handler);
+    let mut parser = Parser::request();
 
     // Let's define a mock HTTP request:
     let http_request = "GET / HTTP/1.0\r\n\
@@ -78,7 +78,7 @@ fn main() {
                         Hello: World\r\n\r\n";
 
     // And now we're ready to go!
-    parser.parse(http_request.as_bytes());
+    parser.parse(&mut callbacks_handler, http_request.as_bytes());
 
     // Now that callbacks have been called, we can introspect
     // the parsing results - for instance, print the HTTP version:
@@ -102,7 +102,7 @@ Some more basic usage examples can be found in the library tests as well.
 
 ## API documentation
 
-You can find [API docs here](http://nbaksalyar.github.io/rust-streaming-http-parser/).
+You can find [API docs here](https://docs.rs/http-muncher/).
 
 ## License
 

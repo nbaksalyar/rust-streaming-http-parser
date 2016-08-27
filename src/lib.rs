@@ -47,6 +47,11 @@ impl HttpParser {
     }
 }
 
+struct ParserContext<'a, H: ParserHandler + 'a> {
+    parser: &'a mut Parser,
+    handler: &'a mut H
+}
+
 #[repr(C)]
 struct HttpParserSettings {
     on_message_begin: HttpCallback,
@@ -62,17 +67,15 @@ struct HttpParserSettings {
 }
 
 #[inline]
-unsafe fn unwrap_parser<'a, H>(http: *mut HttpParser) -> &'a mut Parser<H> {
-    return &mut *((*http).data as *mut Parser<H>);
+unsafe fn unwrap_context<'a, H: ParserHandler>(http: *mut HttpParser) -> &'a mut ParserContext<'a, H> {
+    &mut *((*http).data as *mut ParserContext<H>)
 }
 
 macro_rules! notify_fn_wrapper {
     ( $callback:ident ) => ({
         extern "C" fn $callback<H: ParserHandler>(http: *mut HttpParser) -> libc::c_int {
-            let mut parser: &mut Parser<H> = unsafe {
-                unwrap_parser(http)
-            };
-            return if parser.handler.$callback() { 0 } else { 1 }
+            let mut context = unsafe { unwrap_context::<H>(http) };
+            if context.handler.$callback(context.parser) { 0 } else { 1 }
         };
 
         $callback::<H>
@@ -82,15 +85,9 @@ macro_rules! notify_fn_wrapper {
 macro_rules! data_fn_wrapper {
     ( $callback:ident ) => ({
         extern "C" fn $callback<H: ParserHandler>(http: *mut HttpParser, data: *const u32, size: libc::size_t) -> libc::c_int {
-            let slice = unsafe {
-                std::slice::from_raw_parts(data as *const u8, size as usize)
-            };
-
-            let mut parser: &mut Parser<H> = unsafe {
-                unwrap_parser(http)
-            };
-
-            return if parser.handler.$callback(slice) { 0 } else { 1 }
+            let slice = unsafe { std::slice::from_raw_parts(data as *const u8, size as usize) };
+            let mut context = unsafe { unwrap_context::<H>(http) };
+            if context.handler.$callback(context.parser, slice) { 0 } else { 1 }
         };
 
         $callback::<H>
@@ -143,38 +140,39 @@ extern "C" {
 ///
 /// All callbacks provide a default no-op implementation (i.e. they just return `true`).
 ///
-pub trait ParserHandler {
+#[allow(unused_variables)]
+pub trait ParserHandler: Sized {
     /// Called when the URL part of a request becomes available.
     /// E.g. for `GET /forty-two HTTP/1.1` it will be called with `"/forty_two"` argument.
     ///
     /// It's not called in the response mode.
-    fn on_url(&mut self, &[u8]) -> bool { true }
+    fn on_url(&mut self, &mut Parser, &[u8]) -> bool { true }
 
     /// Called when a response status becomes available.
     ///
     /// It's not called in the request mode.
-    fn on_status(&mut self, &[u8]) -> bool { true }
+    fn on_status(&mut self, &mut Parser, &[u8]) -> bool { true }
 
     /// Called for each HTTP header key part.
-    fn on_header_field(&mut self, &[u8]) -> bool { true }
+    fn on_header_field(&mut self, &mut Parser, &[u8]) -> bool { true }
 
     /// Called for each HTTP header value part.
-    fn on_header_value(&mut self, &[u8]) -> bool { true }
+    fn on_header_value(&mut self, &mut Parser, &[u8]) -> bool { true }
 
     /// Called with body text as an argument when the new part becomes available.
-    fn on_body(&mut self, &[u8]) -> bool { true }
+    fn on_body(&mut self, &mut Parser, &[u8]) -> bool { true }
 
     /// Notified when all available headers have been processed.
-    fn on_headers_complete(&mut self) -> bool { true }
+    fn on_headers_complete(&mut self, &mut Parser) -> bool { true }
 
     /// Notified when the parser receives first bytes to parse.
-    fn on_message_begin(&mut self) -> bool { true }
+    fn on_message_begin(&mut self, &mut Parser) -> bool { true }
 
     /// Notified when the parser has finished its job.
-    fn on_message_complete(&mut self) -> bool { true }
+    fn on_message_complete(&mut self, &mut Parser) -> bool { true }
 
-    fn on_chunk_header(&mut self) -> bool { true }
-    fn on_chunk_complete(&mut self) -> bool { true }
+    fn on_chunk_header(&mut self, &mut Parser) -> bool { true }
+    fn on_chunk_complete(&mut self, &mut Parser) -> bool { true }
 }
 
 fn http_method_name(method_code: u8) -> &'static str {
@@ -224,22 +222,20 @@ fn _http_errno_description(errno: u8) -> &'static str {
 /// ```
 
 #[allow(dead_code)]
-pub struct Parser<H> {
-    handler: H,
+pub struct Parser {
     state: HttpParser,
     parser_type: ParserType,
     flags: u32
 }
 
-unsafe impl<H: ParserHandler> Send for Parser<H> { }
+unsafe impl Send for Parser { }
 
-impl<H: ParserHandler> Parser<H> {
+impl Parser {
     /// Creates a new parser instance for an HTTP response.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn response(handler: H) -> Parser<H> {
+    pub fn response() -> Parser {
         Parser {
-            handler: handler,
             parser_type: ParserType::HttpResponse,
             state: HttpParser::new(ParserType::HttpResponse),
             flags: 0
@@ -249,9 +245,8 @@ impl<H: ParserHandler> Parser<H> {
     /// Creates a new parser instance for an HTTP request.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn request(handler: H) -> Parser<H> {
+    pub fn request() -> Parser {
         Parser {
-            handler: handler,
             parser_type: ParserType::HttpRequest,
             state: HttpParser::new(ParserType::HttpRequest),
             flags: 0
@@ -261,9 +256,8 @@ impl<H: ParserHandler> Parser<H> {
     /// Creates a new parser instance to handle both HTTP requests and responses.
     ///
     /// Provide it with your `ParserHandler` trait implementation as an argument.
-    pub fn request_and_response(handler: H) -> Parser<H> {
+    pub fn request_and_response() -> Parser {
         Parser {
-            handler: handler,
             parser_type: ParserType::HttpBoth,
             state: HttpParser::new(ParserType::HttpBoth),
             flags: 0
@@ -271,18 +265,20 @@ impl<H: ParserHandler> Parser<H> {
     }
 
     /// Parses the provided `data` and returns a number of bytes read.
-    pub fn parse(&mut self, data: &[u8]) -> usize {
+    pub fn parse<'a, H: ParserHandler>(&mut self, handler: &mut H, data: &[u8]) -> usize {
         unsafe {
-            self.state.data = self as *mut _ as *mut libc::c_void;
+            let mut context = ParserContext { parser: self, handler: handler };
 
-            let size = http_parser_execute(&mut self.state as *mut _,
+            context.parser.state.data = &mut context as *mut _ as *mut libc::c_void;
+
+            let size = http_parser_execute(&mut context.parser.state as *mut _,
                                            &HttpParserSettings::new::<H>() as *const _,
                                            data.as_ptr(),
                                            data.len() as libc::size_t) as usize;
 
-            self.flags = http_get_struct_flags(&self.state as *const _);
+            context.parser.flags = http_get_struct_flags(&context.parser.state as *const _);
 
-            return size;
+            size
         }
     }
 
@@ -339,13 +335,9 @@ impl<H: ParserHandler> Parser<H> {
     pub fn should_keep_alive(&self) -> bool {
         self.state.http_should_keep_alive() == 1
     }
-
-    pub fn get(&mut self) -> &mut H {
-        &mut self.handler
-    }
 }
 
-impl<H: ParserHandler> std::fmt::Debug for Parser<H> {
+impl std::fmt::Debug for Parser {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         let (version_major, version_minor) = self.http_version();
         return write!(fmt, "status_code: {}\n\
@@ -388,22 +380,22 @@ mod tests {
         struct TestRequestParser;
 
         impl ParserHandler for TestRequestParser {
-            fn on_url(&mut self, url: &[u8]) -> bool {
+            fn on_url(&mut self, _: &mut Parser, url: &[u8]) -> bool {
                 assert_eq!(b"/say_hello", url);
                 true
             }
 
-            fn on_header_field(&mut self, hdr: &[u8]) -> bool {
+            fn on_header_field(&mut self, _: &mut Parser, hdr: &[u8]) -> bool {
                 assert!(hdr == b"Host" || hdr == b"Content-Length");
                 true
             }
 
-            fn on_header_value(&mut self, val: &[u8]) -> bool {
+            fn on_header_value(&mut self, _: &mut Parser, val: &[u8]) -> bool {
                 assert!(val == b"localhost.localdomain" || val == b"11");
                 true
             }
 
-            fn on_body(&mut self, body: &[u8]) -> bool {
+            fn on_body(&mut self, _: &mut Parser, body: &[u8]) -> bool {
                 assert_eq!(body, b"Hello world");
                 true
             }
@@ -411,10 +403,10 @@ mod tests {
 
         let req = b"POST /say_hello HTTP/1.1\r\nContent-Length: 11\r\nHost: localhost.localdomain\r\n\r\nHello world";
 
-        let handler = TestRequestParser;
+        let mut handler = TestRequestParser;
 
-        let mut parser = Parser::request(handler);
-        let parsed = parser.parse(req);
+        let mut parser = Parser::request();
+        let parsed = parser.parse(&mut handler, req);
 
         assert!(parsed > 0);
         assert!(!parser.has_error());
@@ -427,17 +419,17 @@ mod tests {
         struct TestResponseParser;
 
         impl ParserHandler for TestResponseParser {
-            fn on_status(&mut self, status: &[u8]) -> bool {
+            fn on_status(&mut self, _: &mut Parser, status: &[u8]) -> bool {
                 assert_eq!(b"OK", status);
                 true
             }
 
-            fn on_header_field(&mut self, hdr: &[u8]) -> bool {
+            fn on_header_field(&mut self, _: &mut Parser, hdr: &[u8]) -> bool {
                 assert_eq!(b"Host", hdr);
                 true
             }
 
-            fn on_header_value(&mut self, val: &[u8]) -> bool {
+            fn on_header_value(&mut self, _: &mut Parser, val: &[u8]) -> bool {
                 assert_eq!(b"localhost.localdomain", val);
                 true
             }
@@ -445,10 +437,10 @@ mod tests {
 
         let req = b"HTTP/1.1 200 OK\r\nHost: localhost.localdomain\r\n\r\n";
 
-        let handler = TestResponseParser;
+        let mut handler = TestResponseParser;
 
-        let mut parser = Parser::response(handler);
-        let parsed = parser.parse(req);
+        let mut parser = Parser::response();
+        let parsed = parser.parse(&mut handler, req);
 
         assert!(parsed > 0);
         assert!(!parser.has_error());
@@ -464,10 +456,10 @@ mod tests {
 
         let req = b"GET / HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n";
 
-        let handler = DummyHandler;
+        let mut handler = DummyHandler;
 
-        let mut parser = Parser::request(handler);
-        parser.parse(req);
+        let mut parser = Parser::request();
+        parser.parse(&mut handler, req);
 
         assert_eq!(parser.is_upgrade(), true);
     }
@@ -479,24 +471,24 @@ mod tests {
         }
 
         impl ParserHandler for DummyHandler {
-            fn on_url(&mut self, _: &[u8]) -> bool {
+            fn on_url(&mut self, _: &mut Parser, _: &[u8]) -> bool {
                 self.url_parsed = true;
                 false
             }
 
-            fn on_header_field(&mut self, _: &[u8]) -> bool {
+            fn on_header_field(&mut self, _: &mut Parser, _: &[u8]) -> bool {
                 panic!("This callback shouldn't be executed!");
             }
         }
 
         let req = b"GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
-        let handler = DummyHandler { url_parsed: false };
+        let mut handler = DummyHandler { url_parsed: false };
 
-        let mut parser = Parser::request(handler);
-        parser.parse(req);
+        let mut parser = Parser::request();
+        parser.parse(&mut handler, req);
 
-        assert!(parser.get().url_parsed);
+        assert!(handler.url_parsed);
     }
 
     #[test]
@@ -507,15 +499,15 @@ mod tests {
 
         let req = b"GET / HTTP/1.1\r\nHeader: hello\r\n\r\n";
 
-        let handler = DummyHandler;
-        let mut parser = Parser::request(handler);
+        let mut handler = DummyHandler;
+        let mut parser = Parser::request();
 
-        parser.parse(&req[0..10]);
+        parser.parse(&mut handler, &req[0..10]);
 
         assert_eq!(parser.http_version(), (0, 0));
         assert!(!parser.has_error());
 
-        parser.parse(&req[10..]);
+        parser.parse(&mut handler, &req[10..]);
 
         assert_eq!(parser.http_version(), (1, 1));
     }
@@ -528,10 +520,10 @@ mod tests {
 
         let req = b"UNKNOWN_METHOD / HTTP/3.0\r\nAnswer: 42\r\n\r\n";
 
-        let handler = DummyHandler;
-        let mut parser = Parser::request(handler);
+        let mut handler = DummyHandler;
+        let mut parser = Parser::request();
 
-        parser.parse(req);
+        parser.parse(&mut handler, req);
 
         assert!(parser.has_error());
         assert_eq!(parser.error(), "HPE_INVALID_METHOD");
