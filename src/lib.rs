@@ -1,69 +1,15 @@
 extern crate libc;
 
+mod ffi;
+
 use std::marker::Send;
 
-type HttpCallback = extern fn(*mut HttpParser) -> libc::c_int;
-type HttpDataCallback = extern fn(*mut HttpParser, *const u32, libc::size_t) -> libc::c_int;
+use ffi::*;
 
-#[repr(C)]
-#[derive(Clone, Copy, PartialEq)]
-enum ParserType {
-    HttpRequest,
-    HttpResponse,
-    HttpBoth
-}
-
-#[repr(C)]
-struct HttpParser {
-    // Private Interface
-    _internal_state: libc::uint32_t,
-    _nread: libc::uint32_t,
-    _content_length: libc::uint64_t,
-
-    // Read-Only
-    http_major: libc::c_ushort,
-    http_minor: libc::c_ushort,
-    _extended_status: libc::uint32_t,
-
-    // Public Interface
-    data: *mut libc::c_void
-}
-
-unsafe impl Send for HttpParser { }
-
-impl HttpParser {
-    fn new(parser_type: ParserType) -> HttpParser {
-        let mut p: HttpParser = unsafe { std::mem::uninitialized() };
-        unsafe { http_parser_init(&mut p as *mut _, parser_type); }
-        return p;
-    }
-
-    fn http_body_is_final(&self) -> libc::c_int {
-        unsafe { return http_body_is_final(self); }
-    }
-
-    fn http_should_keep_alive(&self) -> libc::c_int {
-        unsafe { http_should_keep_alive(self) }
-    }
-}
 
 struct ParserContext<'a, H: ParserHandler + 'a> {
     parser: &'a mut Parser,
     handler: &'a mut H
-}
-
-#[repr(C)]
-struct HttpParserSettings {
-    on_message_begin: HttpCallback,
-    on_url: HttpDataCallback,
-    on_status: HttpDataCallback,
-    on_header_field: HttpDataCallback,
-    on_header_value: HttpDataCallback,
-    on_headers_complete: HttpCallback,
-    on_body: HttpDataCallback,
-    on_message_complete: HttpCallback,
-    on_chunk_header: HttpCallback,
-    on_chunk_complete: HttpCallback
 }
 
 #[inline]
@@ -109,23 +55,6 @@ impl HttpParserSettings {
            on_chunk_complete: notify_fn_wrapper!(on_chunk_complete)
        }
     }
-}
-
-#[allow(dead_code)]
-extern "C" {
-    fn http_parser_version() -> u32;
-    fn http_parser_init(parser: *mut HttpParser, parser_type: ParserType);
-    fn http_parser_settings_init(settings: *mut HttpParserSettings);
-    fn http_parser_execute(parser: *mut HttpParser, settings: *const HttpParserSettings, data: *const u8, len: libc::size_t) -> libc::size_t;
-    fn http_method_str(method_code: u8) -> *const libc::c_char;
-    fn http_errno_name(http_errno: u8) -> *const libc::c_char;
-    fn http_errno_description(http_errno: u8) -> *const libc::c_char;
-    fn http_body_is_final(parser: *const HttpParser) -> libc::c_int;
-
-    // Helper function to predictably use aligned bit-field struct
-    fn http_get_struct_flags(parser: *const HttpParser) -> u32;
-
-    fn http_should_keep_alive(parser: *const HttpParser) -> libc::c_int;
 }
 
 // High level Rust interface
