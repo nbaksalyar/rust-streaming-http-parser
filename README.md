@@ -30,8 +30,8 @@ Add the library to your `Cargo.toml` dependencies section:
 
 Or, for the edge version:
 
-	[dependency.http-muncher]
-	git = "https://github.com/nbaksalyar/rust-streaming-http-parser"
+    [dependencies]
+    http-muncher = {git = "https://github.com/nbaksalyar/rust-streaming-http-parser"}
 
 And then you can use it this way:
 
@@ -43,6 +43,7 @@ use http_muncher::{Parser, ParserHandler};
 
 // Now let's define a new listener for parser events:
 struct MyHandler;
+
 impl ParserHandler for MyHandler {
 
     // Now we can define our callbacks here.
@@ -50,25 +51,26 @@ impl ParserHandler for MyHandler {
     // Let's try to handle headers: the following callback function will be
     // called when parser founds a header chunk in the HTTP stream.
 
-    fn on_header_field(&self, parser: &mut Parser, header: &[u8]) -> bool {
+    fn on_header_field(&mut self, parser: &mut Parser, header: &[u8]) -> bool {
         // Print the received header key part
-        println!("{}: ", header);
+        println!("{}: ", String::from_utf8_lossy(header));
 
         // We have nothing to say to parser, and we'd like
-        // it to continue its work - so let's return "false".
-        false
+        // it to continue its work - so let's return "true".
+        true
     }
 
     // And let's print the header value chunks in a similar vein:
-    fn on_header_value(&self, parser: &mut Parser, value: &[u8]) -> bool {
-        println!("\t {}", value);
-        false
+    fn on_header_value(&mut self, parser: &mut Parser, value: &[u8]) -> bool {
+        println!("\t{}", String::from_utf8_lossy(value));
+        true
     }
+
 }
 
 fn main() {
     // Now we can create a parser instance with our callbacks handler:
-    let callbacks_handler = MyHandler;
+    let mut callbacks_handler = MyHandler{};
     let mut parser = Parser::request();
 
     // Let's define a mock HTTP request:
