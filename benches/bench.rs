@@ -12,24 +12,24 @@ fn bench_request_parser(b: &mut Bencher) {
     struct TestRequestParser;
 
     impl ParserHandler for TestRequestParser {
-        fn on_url(&mut self, url: &[u8]) -> Option<u16> {
+        fn on_url(&mut self, _: &mut Parser, url: &[u8]) -> bool {
             assert_eq!(b"/say_hello", url);
-            None
+            true
         }
 
-        fn on_header_field(&mut self, hdr: &[u8]) -> Option<u16> {
+        fn on_header_field(&mut self, _: &mut Parser, hdr: &[u8]) -> bool {
             assert!(hdr == b"Host" || hdr == b"Content-Length");
-            None
+            true
         }
 
-        fn on_header_value(&mut self, val: &[u8]) -> Option<u16> {
+        fn on_header_value(&mut self, _: &mut Parser, val: &[u8]) -> bool {
             assert!(val == b"localhost.localdomain" || val == b"11");
-            None
+            true
         }
 
-        fn on_body(&mut self, body: &[u8]) -> Option<u16> {
+        fn on_body(&mut self, _: &mut Parser, body: &[u8]) -> bool {
             assert_eq!(body, b"Hello world");
-            None
+            true
         }
     }
 
@@ -37,9 +37,9 @@ fn bench_request_parser(b: &mut Bencher) {
 
     let mut handler = TestRequestParser;
 
-    b.iter(|| {
-        let mut parser = Parser::request(&mut handler);
-        let parsed = parser.parse(req);
+    b.iter(move || {
+        let mut parser = Parser::request();
+        let parsed = parser.parse(&mut handler, req);
 
         assert!(parsed > 0);
         assert!(!parser.has_error());
