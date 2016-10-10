@@ -207,7 +207,7 @@ impl Parser {
     }
 
     /// Parses the provided `data` and returns a number of bytes read.
-    pub fn parse<'a, H: ParserHandler>(&mut self, handler: &mut H, data: &[u8]) -> usize {
+    pub fn parse<H: ParserHandler>(&mut self, handler: &mut H, data: &[u8]) -> usize {
         unsafe {
             let mut context = ParserContext {
                 parser: self,
@@ -339,7 +339,8 @@ mod tests {
                 true
             }
 
-            fn on_body(&mut self, _: &mut Parser, body: &[u8]) -> bool {
+            fn on_body(&mut self, parser: &mut Parser, body: &[u8]) -> bool {
+                assert_eq!((1, 1), parser.http_version());
                 assert_eq!(body, b"Hello world");
                 true
             }
@@ -354,7 +355,6 @@ mod tests {
 
         assert!(parsed > 0);
         assert!(!parser.has_error());
-        assert_eq!((1, 1), parser.http_version());
         assert_eq!("POST", parser.http_method());
     }
 
