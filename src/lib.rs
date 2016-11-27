@@ -151,15 +151,18 @@ fn _http_errno_description(errno: u8) -> &'static str {
 /// The main parser interface.
 ///
 /// # Example
-/// ```ignore
+/// ```
+/// use http_muncher::{Parser, ParserHandler};
+/// use std::str;
+///
 /// struct MyHandler;
 /// impl ParserHandler for MyHandler {
-///    fn on_header_field(&self, header: &[u8]) -> bool {
-///        println!("{}: ", header);
+///    fn on_header_field(&mut self, parser: &mut Parser, header: &[u8]) -> bool {
+///        println!("{}: ", str::from_utf8(header).unwrap());
 ///        true
 ///    }
-///    fn on_header_value(&self, value: &[u8]) -> bool {
-///        println!("\t {}", value);
+///    fn on_header_value(&mut self, parser: &mut Parser, value: &[u8]) -> bool {
+///        println!("\t {:?}", str::from_utf8(value).unwrap());
 ///        true
 ///    }
 /// }
@@ -167,7 +170,8 @@ fn _http_errno_description(errno: u8) -> &'static str {
 /// let http_request = b"GET / HTTP/1.0\r\n\
 ///                      Content-Length: 0\r\n\r\n";
 ///
-/// Parser::request(&MyHandler).parse(http_request);
+/// let mut parser = Parser::request();
+/// parser.parse(&mut MyHandler {}, http_request);
 /// ```
 #[allow(dead_code)]
 pub struct Parser {
