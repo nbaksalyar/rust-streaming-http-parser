@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["version","Returns a version of the underlying `http-parser` library."]],"struct":[["Parser","The main parser interface."]],"trait":[["ParserHandler","Used to define a set of callbacks in your code. They would be called by the parser whenever new data is available. You should bear in mind that the data might get in your callbacks in a partial form."]]});
