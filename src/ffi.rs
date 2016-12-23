@@ -46,6 +46,10 @@ impl HttpParser {
     pub fn http_should_keep_alive(&self) -> libc::c_int {
         unsafe { http_should_keep_alive(self) }
     }
+
+    pub fn http_parser_pause(&self, paused: libc::c_int) {
+        unsafe { http_parser_pause(self, paused) }
+    }
 }
 
 #[repr(C)]
@@ -77,4 +81,5 @@ extern "C" {
     pub fn http_get_struct_flags(parser: *const HttpParser) -> u32;
 
     pub fn http_should_keep_alive(parser: *const HttpParser) -> libc::c_int;
+    pub fn http_parser_pause(parser: *const HttpParser, paused: libc::c_int);
 }

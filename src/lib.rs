@@ -285,6 +285,14 @@ impl Parser {
     pub fn should_keep_alive(&self) -> bool {
         self.state.http_should_keep_alive() == 1
     }
+
+    pub fn pause(&mut self) {
+        self.state.http_parser_pause(1);
+    }
+
+    pub fn unpause(&mut self) {
+        self.state.http_parser_pause(0);
+    }
 }
 
 impl std::fmt::Debug for Parser {
