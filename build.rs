@@ -1,5 +1,5 @@
-extern crate gcc;
+extern crate cc;
 
 fn main() {
-    gcc::compile_library("libhttp_parser.a", &["http-parser/http_parser.c", "src/struct_adapter.c"]);
+    cc::Build::new().file("http-parser/http_parser.c").file("src/struct_adapter.c").compile("http_parser");
 }
