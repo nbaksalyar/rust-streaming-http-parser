@@ -20,7 +20,7 @@ unsafe fn unwrap_context<'a, H: ParserHandler>(http: *mut HttpParser) -> &'a mut
 macro_rules! notify_fn_wrapper {
     ( $callback:ident ) => ({
         extern "C" fn $callback<H: ParserHandler>(http: *mut HttpParser) -> libc::c_int {
-            let mut context = unsafe { unwrap_context::<H>(http) };
+            let context = unsafe { unwrap_context::<H>(http) };
             if context.handler.$callback(context.parser) { 0 } else { 1 }
         };
 
@@ -32,7 +32,7 @@ macro_rules! data_fn_wrapper {
     ( $callback:ident ) => ({
         extern "C" fn $callback<H: ParserHandler>(http: *mut HttpParser, data: *const u32, size: libc::size_t) -> libc::c_int {
             let slice = unsafe { std::slice::from_raw_parts(data as *const u8, size as usize) };
-            let mut context = unsafe { unwrap_context::<H>(http) };
+            let context = unsafe { unwrap_context::<H>(http) };
             if context.handler.$callback(context.parser, slice) { 0 } else { 1 }
         };
 
