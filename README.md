@@ -26,13 +26,17 @@ Here's why:
 
 Add the library to your `Cargo.toml` dependencies section:
 
-	[dependencies]
-	http-muncher = "0.3"
+```toml
+[dependencies]
+http-muncher = "0.3"
+```
 
 Or, for the edge version:
 
-    [dependencies]
-    http-muncher = {git = "https://github.com/nbaksalyar/rust-streaming-http-parser"}
+```toml
+[dependencies]
+http-muncher = {git = "https://github.com/nbaksalyar/rust-streaming-http-parser"}
+```
 
 You can find usage example in [examples/parser.rs](examples/parser.rs) (run it by executing `cargo run --example parser`) and in the library tests.
 
