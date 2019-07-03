@@ -1,14 +1,11 @@
-#![feature(test)]
-
+#[macro_use]
+extern crate criterion;
 extern crate http_muncher;
-extern crate test;
 
-use test::Bencher;
-
+use criterion::Criterion;
 use http_muncher::{Parser, ParserHandler};
 
-#[bench]
-fn bench_request_parser(b: &mut Bencher) {
+fn bench_request_parser(c: &mut Criterion) {
     struct TestRequestParser;
 
     impl ParserHandler for TestRequestParser {
@@ -35,15 +32,20 @@ fn bench_request_parser(b: &mut Bencher) {
 
     let req = b"POST /say_hello HTTP/1.1\r\nContent-Length: 11\r\nHost: localhost.localdomain\r\n\r\nHello world";
 
-    let mut handler = TestRequestParser;
+    c.bench_function("parse", move |b| {
+        let mut handler = TestRequestParser;
 
-    b.iter(move || {
-        let mut parser = Parser::request();
-        let parsed = parser.parse(&mut handler, req);
+        b.iter(move || {
+            let mut parser = Parser::request();
+            let parsed = parser.parse(&mut handler, req);
 
-        assert!(parsed > 0);
-        assert!(!parser.has_error());
-        assert_eq!((1, 1), parser.http_version());
-        assert_eq!("POST", parser.http_method());
+            assert!(parsed > 0);
+            assert!(!parser.has_error());
+            assert_eq!((1, 1), parser.http_version());
+            assert_eq!("POST", parser.http_method());
+        })
     });
 }
+
+criterion_group!(benches, bench_request_parser);
+criterion_main!(benches);
