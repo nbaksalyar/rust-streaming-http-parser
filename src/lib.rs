@@ -2,9 +2,8 @@ extern crate libc;
 
 mod ffi;
 
-use std::marker::Send;
-
 use ffi::*;
+use std::marker::Send;
 
 struct ParserContext<'a, H: ParserHandler + 'a> {
     parser: &'a mut Parser,
@@ -141,7 +140,7 @@ fn http_method_name(method_code: u8) -> &'static str {
     unsafe {
         let method_str = http_method_str(method_code);
         let buf = std::ffi::CStr::from_ptr(method_str);
-        return std::str::from_utf8(buf.to_bytes()).unwrap();
+        std::str::from_utf8(buf.to_bytes()).unwrap()
     }
 }
 
@@ -149,7 +148,7 @@ fn _http_errno_name(errno: u8) -> &'static str {
     unsafe {
         let err_str = http_errno_name(errno);
         let buf = std::ffi::CStr::from_ptr(err_str);
-        return std::str::from_utf8(buf.to_bytes()).unwrap();
+        std::str::from_utf8(buf.to_bytes()).unwrap()
     }
 }
 
@@ -157,7 +156,7 @@ fn _http_errno_description(errno: u8) -> &'static str {
     unsafe {
         let err_str = http_errno_description(errno);
         let buf = std::ffi::CStr::from_ptr(err_str);
-        return std::str::from_utf8(buf.to_bytes()).unwrap();
+        std::str::from_utf8(buf.to_bytes()).unwrap()
     }
 }
 
@@ -228,7 +227,7 @@ impl Parser {
         unsafe {
             let mut context = ParserContext {
                 parser: self,
-                handler: handler,
+                handler,
             };
 
             context.parser.state.data = &mut context as *mut _ as *mut libc::c_void;
@@ -253,17 +252,17 @@ impl Parser {
 
     /// Returns an HTTP response status code (think *404*).
     pub fn status_code(&self) -> u16 {
-        return (self.flags & 0xFFFF) as u16;
+        (self.flags & 0xFFFF) as u16
     }
 
     /// Returns an HTTP method static string (`GET`, `POST`, and so on).
     pub fn http_method(&self) -> &'static str {
         let method_code = ((self.flags >> 16) & 0xFF) as u8;
-        return http_method_name(method_code);
+        http_method_name(method_code)
     }
 
     fn http_errnum(&self) -> u8 {
-        return ((self.flags >> 24) & 0x7F) as u8;
+        ((self.flags >> 24) & 0x7F) as u8
     }
 
     /// Checks if the last `parse` call was finished successfully.
@@ -284,12 +283,12 @@ impl Parser {
 
     /// Checks if an upgrade protocol (e.g. WebSocket) was requested.
     pub fn is_upgrade(&self) -> bool {
-        return ((self.flags >> 31) & 0x01) == 1;
+        ((self.flags >> 31) & 0x01) == 1
     }
 
     /// Checks if it was the final body chunk.
     pub fn is_final_chunk(&self) -> bool {
-        return self.state.http_body_is_final() == 1;
+        self.state.http_body_is_final() == 1
     }
 
     /// If `should_keep_alive()` in the `on_headers_complete` or `on_message_complete` callback

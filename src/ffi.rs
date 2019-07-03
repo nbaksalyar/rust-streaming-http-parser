@@ -17,14 +17,14 @@ pub enum ParserType {
 #[repr(C)]
 pub struct HttpParser {
     // Private Interface
-    _internal_state: libc::uint32_t,
-    _nread: libc::uint32_t,
-    _content_length: libc::uint64_t,
+    _internal_state: u32,
+    _nread: u32,
+    _content_length: u64,
 
     // Read-Only
     pub http_major: libc::c_ushort,
     pub http_minor: libc::c_ushort,
-    pub _extended_status: libc::uint32_t,
+    pub _extended_status: u32,
 
     // Public Interface
     pub data: *mut libc::c_void,
@@ -38,13 +38,11 @@ impl HttpParser {
         unsafe {
             http_parser_init(&mut p as *mut _, parser_type);
         }
-        return p;
+        p
     }
 
     pub fn http_body_is_final(&self) -> libc::c_int {
-        unsafe {
-            return http_body_is_final(self);
-        }
+        unsafe { http_body_is_final(self) }
     }
 
     pub fn http_should_keep_alive(&self) -> libc::c_int {
