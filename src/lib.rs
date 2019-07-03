@@ -6,38 +6,51 @@ use std::marker::Send;
 
 use ffi::*;
 
-
 struct ParserContext<'a, H: ParserHandler + 'a> {
     parser: &'a mut Parser,
     handler: &'a mut H,
 }
 
 #[inline]
-unsafe fn unwrap_context<'a, H: ParserHandler>(http: *mut HttpParser) -> &'a mut ParserContext<'a, H> {
+unsafe fn unwrap_context<'a, H: ParserHandler>(
+    http: *mut HttpParser,
+) -> &'a mut ParserContext<'a, H> {
     &mut *((*http).data as *mut ParserContext<H>)
 }
 
 macro_rules! notify_fn_wrapper {
-    ( $callback:ident ) => ({
+    ( $callback:ident ) => {{
         extern "C" fn $callback<H: ParserHandler>(http: *mut HttpParser) -> libc::c_int {
             let context = unsafe { unwrap_context::<H>(http) };
-            if context.handler.$callback(context.parser) { 0 } else { 1 }
+            if context.handler.$callback(context.parser) {
+                0
+            } else {
+                1
+            }
         };
 
         $callback::<H>
-    });
+    }};
 }
 
 macro_rules! data_fn_wrapper {
-    ( $callback:ident ) => ({
-        extern "C" fn $callback<H: ParserHandler>(http: *mut HttpParser, data: *const u32, size: libc::size_t) -> libc::c_int {
+    ( $callback:ident ) => {{
+        extern "C" fn $callback<H: ParserHandler>(
+            http: *mut HttpParser,
+            data: *const u32,
+            size: libc::size_t,
+        ) -> libc::c_int {
             let slice = unsafe { std::slice::from_raw_parts(data as *const u8, size as usize) };
             let context = unsafe { unwrap_context::<H>(http) };
-            if context.handler.$callback(context.parser, slice) { 0 } else { 1 }
+            if context.handler.$callback(context.parser, slice) {
+                0
+            } else {
+                1
+            }
         };
 
         $callback::<H>
-    });
+    }};
 }
 
 impl HttpParserSettings {
@@ -220,11 +233,12 @@ impl Parser {
 
             context.parser.state.data = &mut context as *mut _ as *mut libc::c_void;
 
-            let size =
-                http_parser_execute(&mut context.parser.state as *mut _,
-                                    &HttpParserSettings::new::<H>() as *const _,
-                                    data.as_ptr(),
-                                    data.len() as libc::size_t) as usize;
+            let size = http_parser_execute(
+                &mut context.parser.state as *mut _,
+                &HttpParserSettings::new::<H>() as *const _,
+                data.as_ptr(),
+                data.len() as libc::size_t,
+            ) as usize;
 
             context.parser.flags = http_get_struct_flags(&context.parser.state as *const _);
 
@@ -298,16 +312,18 @@ impl Parser {
 impl std::fmt::Debug for Parser {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         let (version_major, version_minor) = self.http_version();
-        return write!(fmt,
-                      "status_code: {}\nmethod: {}\nerror: {}, {}\nupgrade: {}\nhttp_version: \
-                       {}.{}",
-                      self.status_code(),
-                      self.http_method(),
-                      self.error(),
-                      self.error_description(),
-                      self.is_upgrade(),
-                      version_major,
-                      version_minor);
+        return write!(
+            fmt,
+            "status_code: {}\nmethod: {}\nerror: {}, {}\nupgrade: {}\nhttp_version: \
+             {}.{}",
+            self.status_code(),
+            self.http_method(),
+            self.error(),
+            self.error_description(),
+            self.is_upgrade(),
+            version_major,
+            version_minor
+        );
     }
 }
 
@@ -324,7 +340,7 @@ pub fn version() -> (u32, u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{version, ParserHandler, Parser};
+    use super::{version, Parser, ParserHandler};
 
     #[test]
     fn test_version() {

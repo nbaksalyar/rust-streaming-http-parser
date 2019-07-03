@@ -1,11 +1,11 @@
 #![feature(test)]
 
-extern crate test;
 extern crate http_muncher;
+extern crate test;
 
 use test::Bencher;
 
-use http_muncher::{ParserHandler, Parser};
+use http_muncher::{Parser, ParserHandler};
 
 #[bench]
 fn bench_request_parser(b: &mut Bencher) {

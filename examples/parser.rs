@@ -10,7 +10,6 @@ use http_muncher::{Parser, ParserHandler};
 struct MyHandler;
 
 impl ParserHandler for MyHandler {
-
     // Now we can define our callbacks here.
     //
     // Let's try to handle headers: the following callback function will be
@@ -29,9 +28,6 @@ impl ParserHandler for MyHandler {
         println!("\t{}", str::from_utf8(value).unwrap());
         true
     }
-
-    
-
 }
 
 fn main() {
@@ -57,13 +53,13 @@ fn main() {
 
 // Now execute "cargo run", and as a result you should see this output:
 
-// Content-Type: 
+// Content-Type:
 //	 text/plain
-// Content-Length: 
+// Content-Length:
 //	 0
-// Hello: 
+// Hello:
 // 	 World
-// 
+//
 // HTTP v1.1
 
 // ... and the rest is almost the same - have fun experimenting!
