@@ -4,6 +4,8 @@ env:
     - PATH=$PATH:$HOME/.cargo/bin
 os:
   - linux
+  - osx
+  - windows
 language: rust
 sudo: false
 cache:

@@ -1,7 +1,6 @@
 # HttpMuncher: Rust Streaming HTTP parser
 
 ![Build Status](https://travis-ci.org/nbaksalyar/rust-streaming-http-parser.svg?branch=master)
-[![Build status](https://ci.appveyor.com/api/projects/status/2ihcgjco68t08uge?svg=true)](https://ci.appveyor.com/project/nbaksalyar/rust-streaming-http-parser)
 [![](http://meritbadge.herokuapp.com/http-muncher)](https://crates.io/crates/http-muncher)
 [![Documentation](https://docs.rs/http-muncher/badge.svg)](https://docs.rs/http-muncher)
 
